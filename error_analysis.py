@@ -325,9 +325,21 @@ def aggregate_error_stats(page_analyses: List[PageErrorAnalysis]) -> Dict:
     total_errors_with_pos = 0
     
     def normalize_char(char: str) -> str:
-        """Normalise un caractère (minuscule, sans accents)."""
+        """Normalise un caractère (minuscule, sans accents, ponctuation normalisée)."""
         if char is None:
             return None
+        
+        # Normaliser la ponctuation (différentes formes d'apostrophes, guillemets, etc.)
+        punct_map = {
+            ''': "'", ''': "'", '`': "'", '´': "'",  # Apostrophes
+            '"': '"', '"': '"', '„': '"', '«': '"', '»': '"',  # Guillemets
+            '–': '-', '—': '-', '−': '-',  # Tirets
+            '…': '...',  # Points de suspension
+            '\u00A0': ' ',  # Espace insécable
+        }
+        if char in punct_map:
+            char = punct_map[char]
+        
         # Supprimer les accents
         normalized = unicodedata.normalize('NFD', char)
         normalized = ''.join(c for c in normalized if not unicodedata.combining(c))
