@@ -485,7 +485,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         // Radar chart
         Plotly.newPlot('radar-chart', [{{
             type: 'scatterpolar',
-            r: [{avg_precision}, {avg_recall}, {avg_iou}, {avg_format}, {100 - micro_cer}],
+            r: [{avg_precision}, {avg_recall}, {avg_iou}, {avg_format}, {accuracy}],
             theta: ['Précision', 'Recall', 'IoU', 'Format', 'Accuracy'],
             fill: 'toself',
             marker: {{ color: '#4F46E5' }}
@@ -684,6 +684,7 @@ def generate_html_report(
     }
     
     # Générer le HTML
+    accuracy = 100 - micro_cer  # Pré-calculer pour éviter problème de format
     html_content = HTML_TEMPLATE.format(
         timestamp=timestamp,
         micro_cer=micro_cer,
@@ -696,6 +697,7 @@ def generate_html_report(
         avg_recall=avg_recall,
         avg_format=avg_format,
         mean_cer=mean_cer,
+        accuracy=accuracy,
         doc_table_rows=doc_table_rows,
         error_stats_html=error_stats_html,
         confusions_raw_html=confusions_raw_html,
