@@ -415,7 +415,7 @@ def generate_markdown_report(
             'total_gt': total_gt
         })
     
-    if docs_segmentation_data and len(docs_segmentation_data) > 1:
+    if docs_segmentation_data and len(docs_segmentation_data) >= 1:
         fig, ax = plt.subplots(figsize=(12, 8))
         
         seg_rates = [d['seg_error_rate'] for d in docs_segmentation_data]
