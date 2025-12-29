@@ -111,6 +111,62 @@ def generate_markdown_report(
     plt.close()
     
     # =========================================================================
+    # Graphe 1c: Distribution de l'IoU par page
+    # =========================================================================
+    fig, ax = plt.subplots(figsize=(10, 5))
+    iou_values = [m['iou'] * 100 for m in all_metrics]  # IoU en %
+    
+    ax.hist(iou_values, bins=30, color=colors['success'], alpha=0.7, edgecolor='white')
+    ax.axvline(np.mean(iou_values), color=colors['danger'], linestyle='--', 
+               linewidth=2, label=f'Moyenne: {np.mean(iou_values):.1f}%')
+    ax.axvline(np.median(iou_values), color=colors['primary'], linestyle='--', 
+               linewidth=2, label=f'Médiane: {np.median(iou_values):.1f}%')
+    
+    ax.set_xlabel('IoU (%)', fontsize=12)
+    ax.set_ylabel('Nombre de pages', fontsize=12)
+    ax.set_title('Distribution de l\'IoU (Intersection over Union) par page', fontsize=14, fontweight='bold')
+    ax.legend(loc='upper left')
+    
+    plt.tight_layout()
+    iou_dist_path = os.path.join(images_dir, 'iou_distribution.png')
+    plt.savefig(iou_dist_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # =========================================================================
+    # Graphe 1d: IoU moyen par document (tous les documents)
+    # =========================================================================
+    sorted_docs_by_iou = sorted(document_stats.items(), key=lambda x: x[1]['avg_iou'], reverse=True)
+    
+    num_docs_iou = len(sorted_docs_by_iou)
+    fig_height_iou = max(8, num_docs_iou * 0.3)
+    fig, ax = plt.subplots(figsize=(12, fig_height_iou))
+    
+    doc_names_iou = [name[:30] + '...' if len(name) > 30 else name for name, _ in sorted_docs_by_iou]
+    doc_ious = [stats['avg_iou'] * 100 for _, stats in sorted_docs_by_iou]
+    
+    # Créer un gradient de couleurs du rouge au vert selon l'IoU (inversé par rapport au CER)
+    norm_iou = plt.Normalize(min(doc_ious), max(doc_ious))
+    cmap_iou = plt.cm.RdYlGn  # Vert pour bon (haut IoU), rouge pour mauvais
+    bar_colors_iou = [cmap_iou(norm_iou(iou)) for iou in doc_ious]
+    
+    bars = ax.barh(doc_names_iou, doc_ious, color=bar_colors_iou, alpha=0.85, edgecolor='white', height=0.7)
+    
+    # Ajouter une ligne verticale pour la moyenne
+    mean_iou = np.mean(doc_ious)
+    ax.axvline(mean_iou, color=colors['primary'], linestyle='--', linewidth=2, 
+               label=f'Moyenne: {mean_iou:.1f}%')
+    
+    ax.set_xlabel('IoU (%)', fontsize=12)
+    ax.set_ylabel('Document', fontsize=12)
+    ax.set_title(f'IoU Moyen par Document ({num_docs_iou} documents)', fontsize=14, fontweight='bold')
+    ax.legend(loc='lower right')
+    
+    plt.tight_layout()
+    iou_by_document_path = os.path.join(images_dir, 'iou_by_document.png')
+    plt.savefig(iou_by_document_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # =========================================================================
     # Graphe 2: Comparaison des variantes CER
     # =========================================================================
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -552,6 +608,33 @@ Cette métrique montre la qualité de la transcription indépendamment des erreu
 
 ---
 
+## 📐 Distribution de l'IoU par page
+
+Le graphe ci-dessous montre la distribution de l'Intersection over Union (IoU) des bounding boxes sur l'ensemble des pages.
+Un IoU élevé indique que les bounding boxes prédites correspondent bien aux bounding boxes de référence.
+
+![Distribution de l'IoU]({os.path.relpath(iou_dist_path, output_dir)})
+
+### Statistiques de distribution (IoU)
+
+| Statistique | Valeur |
+|-------------|--------|
+| Moyenne | {np.mean(iou_values):.2f}% |
+| Médiane | {np.median(iou_values):.2f}% |
+| Écart-type | {np.std(iou_values):.2f}% |
+| Min | {np.min(iou_values):.2f}% |
+| Max | {np.max(iou_values):.2f}% |
+
+---
+
+## 📐 IoU par Document
+
+Vue d'ensemble de l'IoU moyen pour chaque document. Le gradient de couleur permet d'identifier rapidement les documents avec de bons ou mauvais alignements.
+
+![IoU par Document]({os.path.relpath(iou_by_document_path, output_dir)})
+
+---
+
 ## 🔄 Impact des Normalisations
 
 Ce graphe compare le CER selon différentes stratégies de normalisation, permettant d'identifier si les erreurs sont principalement dues à la casse, aux accents ou à la ponctuation.
@@ -769,6 +852,21 @@ Ce graphe permet d'identifier si les erreurs sont principalement dues à la **tr
 |--------------|------------|-------------|
 """
             for conf in error_stats['top_confusions'][:10]:
+                gt_char = conf['gt'] if conf['gt'] else '∅'
+                pred_char = conf['pred'] if conf['pred'] else '∅'
+                markdown_content += f"| `{gt_char}` | `{pred_char}` | {conf['count']} |\n"
+        
+        # Top confusions normalisées (vraies erreurs hors casse/accents)
+        if error_stats.get('top_confusions_normalized'):
+            markdown_content += """
+### Top 10 Confusions Normalisées
+
+Ces erreurs persistent après normalisation (minuscules, sans accents). Ce sont les **vraies erreurs de transcription**, pas les erreurs de casse ou d'accentuation.
+
+| Ground Truth | Prédiction | Occurrences |
+|--------------|------------|-------------|
+"""
+            for conf in error_stats['top_confusions_normalized'][:10]:
                 gt_char = conf['gt'] if conf['gt'] else '∅'
                 pred_char = conf['pred'] if conf['pred'] else '∅'
                 markdown_content += f"| `{gt_char}` | `{pred_char}` | {conf['count']} |\n"

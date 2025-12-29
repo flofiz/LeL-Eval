@@ -313,6 +313,9 @@ def aggregate_error_stats(page_analyses: List[PageErrorAnalysis]) -> Dict:
     # Matrice de confusion: gt_char -> pred_char -> count
     confusion_matrix = defaultdict(lambda: defaultdict(int))
     
+    # Matrice de confusion normalisée (pour voir les vrais erreurs hors casse/accents)
+    normalized_confusion_matrix = defaultdict(lambda: defaultdict(int))
+    
     # Erreurs par catégorie de caractère
     errors_by_category = defaultdict(lambda: {'errors': 0, 'total': 0})
     
@@ -320,6 +323,16 @@ def aggregate_error_stats(page_analyses: List[PageErrorAnalysis]) -> Dict:
     all_cluster_sizes = []
     total_clustered_errors = 0
     total_errors_with_pos = 0
+    
+    def normalize_char(char: str) -> str:
+        """Normalise un caractère (minuscule, sans accents)."""
+        if char is None:
+            return None
+        # Supprimer les accents
+        normalized = unicodedata.normalize('NFD', char)
+        normalized = ''.join(c for c in normalized if not unicodedata.combining(c))
+        # Minuscule
+        return normalized.lower()
     
     for page in page_analyses:
         total_insertions += page.total_insertions
@@ -333,9 +346,16 @@ def aggregate_error_stats(page_analyses: List[PageErrorAnalysis]) -> Dict:
         total_merged_lines += len(page.merged_lines)
         
         for line_analysis in page.line_analyses:
-            # Matrice de confusion
+            # Matrice de confusion (brute)
             for gt_char, pred_char in line_analysis.substitution_pairs:
                 confusion_matrix[gt_char][pred_char] += 1
+                
+                # Version normalisée
+                norm_gt = normalize_char(gt_char)
+                norm_pred = normalize_char(pred_char)
+                # N'ajouter que si c'est une vraie erreur après normalisation
+                if norm_gt != norm_pred:
+                    normalized_confusion_matrix[norm_gt][norm_pred] += 1
             
             # Erreurs par catégorie (basé sur les opérations)
             for op in line_analysis.operations:
@@ -366,6 +386,17 @@ def aggregate_error_stats(page_analyses: List[PageErrorAnalysis]) -> Dict:
                 'count': count
             })
     top_confusions.sort(key=lambda x: x['count'], reverse=True)
+    
+    # Top confusions normalisées (vraies erreurs de transcription)
+    top_confusions_normalized = []
+    for gt_char, pred_dict in normalized_confusion_matrix.items():
+        for pred_char, count in pred_dict.items():
+            top_confusions_normalized.append({
+                'gt': gt_char,
+                'pred': pred_char,
+                'count': count
+            })
+    top_confusions_normalized.sort(key=lambda x: x['count'], reverse=True)
     
     # Convertir confusion_matrix en dict normal
     confusion_dict = {k: dict(v) for k, v in confusion_matrix.items()}
@@ -400,6 +431,7 @@ def aggregate_error_stats(page_analyses: List[PageErrorAnalysis]) -> Dict:
         },
         'confusion_matrix': confusion_dict,
         'top_confusions': top_confusions[:30],  # Top 30
+        'top_confusions_normalized': top_confusions_normalized[:30],  # Top 30 normalisées
         'by_category': category_stats,
         'clustering': {
             'avg_cluster_size': round(avg_cluster_size, 2),
@@ -412,6 +444,7 @@ def aggregate_error_stats(page_analyses: List[PageErrorAnalysis]) -> Dict:
             'merged_lines': total_merged_lines
         }
     }
+
 
 
 def line_analysis_to_dict(analysis: LineErrorAnalysis) -> Dict:
