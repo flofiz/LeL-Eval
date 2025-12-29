@@ -346,7 +346,7 @@ if __name__ == "__main__":
     # Configuration
     API_URL = "http://localhost:8000"  # URL du serveur VLLM
     root_path = '/work/lead/ff379570/Lettres_En_Lumieres_tf/'
-    TEST_JSON_PATH = "Data/Datasets/Generated/jsonraw.json"
+    TEST_JSON_PATH = "../Qwen3/Data/Datasets/Generated/jsonraw.json"
     OUTPUT_DIR = "Data/labelme_outputs_generated"  
     # SYSTEM_PROMPT = Qwen2_5_SYSTEM_MESSAGE
     SYSTEM_PROMPT = Qwen2_5_OLD_SYSTEM_MESSAGE
