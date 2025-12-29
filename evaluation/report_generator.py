@@ -543,6 +543,18 @@ def generate_markdown_report(
     total_lines_pred = sum(m['num_predicted'] for m in all_metrics)
     total_matched = sum(m['num_matched'] for m in all_metrics)
     
+    # Calculer micro-CER (pondéré par caractères - niveau page)
+    total_edit_dist = sum(m['total_edit_distance'] for m in all_metrics)
+    total_gt_chars = sum(m['total_gt_chars'] for m in all_metrics)
+    micro_cer = (total_edit_dist / total_gt_chars * 100) if total_gt_chars > 0 else 100.0
+    
+    # Calculer macro-CER (moyenne des CER par document)
+    doc_cers = [stats['avg_cer'] * 100 for stats in document_stats.values()]
+    macro_cer = np.mean(doc_cers) if doc_cers else 100.0
+    
+    # Calculer le biais (écart entre micro et macro)
+    cer_bias = micro_cer - macro_cer
+    
     # Quartiles CER
     cer_array = np.array([m['cer'] * 100 for m in all_metrics])
     q1, q2, q3 = np.percentile(cer_array, [25, 50, 75])
@@ -555,10 +567,21 @@ def generate_markdown_report(
 
 ## 📈 Résumé Exécutif
 
+### Métriques de Performance (CER)
+
+| Métrique | Valeur | Description |
+|----------|--------|-------------|
+| **Micro-CER** | {micro_cer:.2f}% | Pondéré par caractères (niveau page) |
+| **Macro-CER** | {macro_cer:.2f}% | Moyenne par document (non biaisé) |
+| **Biais** | {cer_bias:+.2f}pp | Écart micro-macro |
+| **CER normalisé** | {page_cer_variants.get('normalized', 0)*100:.2f}% | Sans accents/casse/ponctuation |
+
+> **Interprétation du biais:** {"⚠️ Les gros documents tirent le CER vers le haut" if cer_bias > 1 else ("⚠️ Les gros documents ont de meilleurs scores" if cer_bias < -1 else "✅ Corpus équilibré")}
+
+### Autres Métriques
+
 | Métrique | Valeur |
 |----------|--------|
-| **CER moyen** | {base_cer:.2f}% |
-| **CER normalisé** | {page_cer_variants.get('normalized', 0)*100:.2f}% |
 | **Précision** | {avg_precision*100:.1f}% |
 | **Recall** | {avg_recall*100:.1f}% |
 | **IoU moyen** | {avg_iou*100:.1f}% |
