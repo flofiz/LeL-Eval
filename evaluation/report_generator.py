@@ -419,16 +419,16 @@ def generate_markdown_report(
         fig, ax = plt.subplots(figsize=(12, 8))
         
         seg_rates = [d['seg_error_rate'] for d in docs_segmentation_data]
-        cers = [d['cer'] for d in docs_segmentation_data]
+        seg_doc_cers = [d['cer'] for d in docs_segmentation_data]
         sizes = [max(20, min(200, d['total_gt'] * 3)) for d in docs_segmentation_data]  # Taille proportionnelle au nb de lignes
         
         # Scatter plot avec couleur selon le CER
-        scatter = ax.scatter(seg_rates, cers, alpha=0.7, c=cers, 
+        scatter = ax.scatter(seg_rates, seg_doc_cers, alpha=0.7, c=seg_doc_cers, 
                             cmap='RdYlGn_r', edgecolors='white', s=sizes)
         
         # Calculer les médianes pour les quadrants
         median_seg = np.median(seg_rates)
-        median_cer = np.median(cers)
+        median_cer = np.median(seg_doc_cers)
         
         # Tracer les lignes de quadrants
         ax.axvline(median_seg, color=colors['gray'], linestyle=':', alpha=0.7)
@@ -450,14 +450,14 @@ def generate_markdown_report(
         
         # Ligne de tendance
         if len(seg_rates) > 2:
-            z = np.polyfit(seg_rates, cers, 1)
+            z = np.polyfit(seg_rates, seg_doc_cers, 1)
             p = np.poly1d(z)
             x_trend = np.linspace(min(seg_rates), max(seg_rates), 100)
             ax.plot(x_trend, p(x_trend), '--', color=colors['primary'], linewidth=2,
                    label=f'Tendance (pente: {z[0]:.2f})')
             
             # Calculer la corrélation
-            correlation = np.corrcoef(seg_rates, cers)[0, 1]
+            correlation = np.corrcoef(seg_rates, seg_doc_cers)[0, 1]
             ax.text(0.5, 0.02, f'Corrélation: {correlation:.3f}', 
                    transform=ax.transAxes, fontsize=11, verticalalignment='bottom',
                    ha='center', fontweight='bold',
