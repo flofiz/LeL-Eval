@@ -254,7 +254,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {document_table_rows}
+                                    {doc_table_rows}
                                 </tbody>
                             </table>
                         </div>
@@ -696,7 +696,7 @@ def generate_html_report(
         avg_recall=avg_recall,
         avg_format=avg_format,
         mean_cer=mean_cer,
-        document_table_rows=document_table_rows,
+        doc_table_rows=doc_table_rows,
         error_stats_html=error_stats_html,
         confusions_raw_html=confusions_raw_html,
         confusions_norm_html=confusions_norm_html,
