@@ -329,13 +329,35 @@ def aggregate_error_stats(page_analyses: List[PageErrorAnalysis]) -> Dict:
         if char is None:
             return None
         
-        # Normaliser la ponctuation (différentes formes d'apostrophes, guillemets, etc.)
+        # Normaliser la ponctuation (utiliser les codes Unicode explicites)
         punct_map = {
-            ''': "'", ''': "'", '`': "'", '´': "'",  # Apostrophes
-            '"': '"', '"': '"', '„': '"', '«': '"', '»': '"',  # Guillemets
-            '–': '-', '—': '-', '−': '-',  # Tirets
-            '…': '...',  # Points de suspension
-            '\u00A0': ' ',  # Espace insécable
+            # Apostrophes et quotes simples
+            '\u2018': "'",  # ' LEFT SINGLE QUOTATION MARK
+            '\u2019': "'",  # ' RIGHT SINGLE QUOTATION MARK
+            '\u201A': "'",  # ‚ SINGLE LOW-9 QUOTATION MARK
+            '\u201B': "'",  # ‛ SINGLE HIGH-REVERSED-9 QUOTATION MARK
+            '\u0060': "'",  # ` GRAVE ACCENT
+            '\u00B4': "'",  # ´ ACUTE ACCENT
+            '\u02BC': "'",  # ʼ MODIFIER LETTER APOSTROPHE
+            '\u02BB': "'",  # ʻ MODIFIER LETTER TURNED COMMA
+            '\u02C8': "'",  # ˈ MODIFIER LETTER VERTICAL LINE
+            '\u02CA': "'",  # ˊ MODIFIER LETTER ACUTE ACCENT
+            '\u02CB': "'",  # ˋ MODIFIER LETTER GRAVE ACCENT
+            '\u055A': "'",  # ՚ ARMENIAN APOSTROPHE
+            # Guillemets doubles
+            '\u201C': '"',  # " LEFT DOUBLE QUOTATION MARK
+            '\u201D': '"',  # " RIGHT DOUBLE QUOTATION MARK
+            '\u201E': '"',  # „ DOUBLE LOW-9 QUOTATION MARK
+            '\u00AB': '"',  # « LEFT-POINTING DOUBLE ANGLE QUOTATION MARK
+            '\u00BB': '"',  # » RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
+            # Tirets
+            '\u2013': '-',  # – EN DASH
+            '\u2014': '-',  # — EM DASH
+            '\u2212': '-',  # − MINUS SIGN
+            '\u2010': '-',  # ‐ HYPHEN
+            # Autres
+            '\u2026': '.',  # … HORIZONTAL ELLIPSIS -> just a dot
+            '\u00A0': ' ',  # NO-BREAK SPACE
         }
         if char in punct_map:
             char = punct_map[char]
