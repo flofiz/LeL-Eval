@@ -32,6 +32,7 @@ from evaluation import (
     process_sample,
     # Report Generator
     generate_markdown_report,
+    generate_html_report,
     # Data Loader
     load_test_data,
     load_training_data,
@@ -226,10 +227,25 @@ async def run_evaluation_async(api_url: str,
         report_name="evaluation_report"
     )
     
+    # Générer le rapport HTML interactif
+    html_report_path = generate_html_report(
+        all_metrics=all_metrics,
+        document_stats=document_stats,
+        error_stats=error_stats,
+        page_cer_variants=page_cer_variants,
+        doc_cer_variants=doc_cer_variants,
+        output_dir=report_output_dir,
+        report_name="evaluation_report"
+    )
+    
+    print(f"\n📄 Rapports générés:")
+    print(f"   - Markdown: {report_path} (pour VSCode)")
+    print(f"   - HTML:     {html_report_path} (pour navigateur)")
+    
     if output_dir:
-        print(f"Fichiers LabelMe sauvegardés dans: {output_dir}/labelme/")
-        print("  - *_pred.json : prédictions du modèle")
-        print("  - *_gt.json   : vérités terrain")
+        print(f"\n📁 Fichiers LabelMe sauvegardés dans: {output_dir}/labelme/")
+        print("   - *_pred.json : prédictions du modèle")
+        print("   - *_gt.json   : vérités terrain")
     
     return output
 

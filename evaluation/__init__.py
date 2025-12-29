@@ -12,6 +12,7 @@ Modules:
     api_client: Client asynchrone pour l'API VLLM
     labelme_export: Export au format LabelMe
     report_generator: Génération de rapports Markdown
+    html_report: Génération de rapports HTML interactifs
     data_loader: Chargement des données de test/entraînement
 """
 
@@ -61,6 +62,7 @@ from .labelme_export import (
 
 # Report Generator
 from .report_generator import generate_markdown_report
+from .html_report import generate_html_report
 
 # Data Loader
 from .data_loader import (
@@ -100,6 +102,7 @@ __all__ = [
     'tsv_to_labelme',
     # Report Generator
     'generate_markdown_report',
+    'generate_html_report',
     # Data Loader
     'load_test_data',
     'load_training_data',
