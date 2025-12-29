@@ -410,6 +410,11 @@ def compute_per_document_stats(all_metrics: List[Dict]) -> Dict[str, Dict[str, f
         total_chars = sum(m['total_gt_chars'] for m in doc_metrics)
         weighted_cer = total_edit_dist / total_chars if total_chars > 0 else 1.0
         
+        # Calculs pour les métriques de segmentation
+        total_matched = sum(m['num_matched'] for m in doc_metrics)
+        total_predicted = sum(m['num_predicted'] for m in doc_metrics)
+        total_ground_truth = sum(m['num_ground_truth'] for m in doc_metrics)
+        
         doc_stat = {
             'avg_cer': float(weighted_cer),  # CER pondéré par caractères
             'total_gt_chars': total_chars,  # Pour pondération au niveau global
@@ -419,9 +424,13 @@ def compute_per_document_stats(all_metrics: List[Dict]) -> Dict[str, Dict[str, f
             'avg_recall': float(np.mean([m['recall'] for m in doc_metrics])),
             'avg_precision': float(np.mean([m['precision'] for m in doc_metrics])),
             'num_pages': len(doc_metrics),
-            'total_matched': sum(m['num_matched'] for m in doc_metrics),
-            'total_predicted': sum(m['num_predicted'] for m in doc_metrics),
-            'total_ground_truth': sum(m['num_ground_truth'] for m in doc_metrics),
+            'total_matched': total_matched,
+            'total_predicted': total_predicted,
+            'total_ground_truth': total_ground_truth,
+            # Métriques de segmentation pour analyse CER vs segmentation
+            'missing_lines': total_ground_truth - total_matched,
+            'extra_lines': total_predicted - total_matched,
+            'segmentation_error_rate': 1.0 - (total_matched / total_ground_truth) if total_ground_truth > 0 else 0.0,
             'pages': [m['name'] for m in doc_metrics]
         }
         

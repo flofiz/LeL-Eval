@@ -392,6 +392,90 @@ def generate_markdown_report(
         plt.close()
     
     # =========================================================================
+    # Graphe 9: CER vs Erreurs de Segmentation par document
+    # Ce graphe permet de distinguer les problèmes de transcription des problèmes de segmentation
+    # =========================================================================
+    cer_vs_segmentation_path = None
+    
+    # Préparer les données de segmentation par document
+    docs_segmentation_data = []
+    for doc_name, stats in document_stats.items():
+        seg_error_rate = stats.get('segmentation_error_rate', 0) * 100  # en %
+        cer = stats['avg_cer'] * 100
+        missing = stats.get('missing_lines', 0)
+        extra = stats.get('extra_lines', 0)
+        total_gt = stats['total_ground_truth']
+        
+        docs_segmentation_data.append({
+            'name': doc_name,
+            'cer': cer,
+            'seg_error_rate': seg_error_rate,
+            'missing_lines': missing,
+            'extra_lines': extra,
+            'total_gt': total_gt
+        })
+    
+    if docs_segmentation_data and len(docs_segmentation_data) > 1:
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        seg_rates = [d['seg_error_rate'] for d in docs_segmentation_data]
+        cers = [d['cer'] for d in docs_segmentation_data]
+        sizes = [max(20, min(200, d['total_gt'] * 3)) for d in docs_segmentation_data]  # Taille proportionnelle au nb de lignes
+        
+        # Scatter plot avec couleur selon le CER
+        scatter = ax.scatter(seg_rates, cers, alpha=0.7, c=cers, 
+                            cmap='RdYlGn_r', edgecolors='white', s=sizes)
+        
+        # Calculer les médianes pour les quadrants
+        median_seg = np.median(seg_rates)
+        median_cer = np.median(cers)
+        
+        # Tracer les lignes de quadrants
+        ax.axvline(median_seg, color=colors['gray'], linestyle=':', alpha=0.7)
+        ax.axhline(median_cer, color=colors['gray'], linestyle=':', alpha=0.7)
+        
+        # Label les quadrants
+        ax.text(0.02, 0.98, 'Bonne segmentation\nBonne transcription', 
+               transform=ax.transAxes, fontsize=9, verticalalignment='top',
+               color=colors['success'], fontweight='bold', alpha=0.8)
+        ax.text(0.98, 0.98, 'Mauvaise segmentation\nBonne/Moyenne transcription', 
+               transform=ax.transAxes, fontsize=9, verticalalignment='top', ha='right',
+               color=colors['warning'], fontweight='bold', alpha=0.8)
+        ax.text(0.02, 0.02, 'Bonne segmentation\nMauvaise transcription', 
+               transform=ax.transAxes, fontsize=9, verticalalignment='bottom',
+               color=colors['info'], fontweight='bold', alpha=0.8)
+        ax.text(0.98, 0.02, 'Mauvaise segmentation\nMauvaise transcription', 
+               transform=ax.transAxes, fontsize=9, verticalalignment='bottom', ha='right',
+               color=colors['danger'], fontweight='bold', alpha=0.8)
+        
+        # Ligne de tendance
+        if len(seg_rates) > 2:
+            z = np.polyfit(seg_rates, cers, 1)
+            p = np.poly1d(z)
+            x_trend = np.linspace(min(seg_rates), max(seg_rates), 100)
+            ax.plot(x_trend, p(x_trend), '--', color=colors['primary'], linewidth=2,
+                   label=f'Tendance (pente: {z[0]:.2f})')
+            
+            # Calculer la corrélation
+            correlation = np.corrcoef(seg_rates, cers)[0, 1]
+            ax.text(0.5, 0.02, f'Corrélation: {correlation:.3f}', 
+                   transform=ax.transAxes, fontsize=11, verticalalignment='bottom',
+                   ha='center', fontweight='bold',
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
+        
+        ax.set_xlabel('Taux d\'erreur de segmentation (%)\n(lignes non matchées / lignes GT)', fontsize=12)
+        ax.set_ylabel('CER moyen (%)', fontsize=12)
+        ax.set_title('CER vs Erreurs de Segmentation par Document\n(Taille des points = nombre de lignes GT)', 
+                    fontsize=14, fontweight='bold')
+        ax.legend(loc='upper left')
+        
+        plt.colorbar(scatter, ax=ax, label='CER (%)')
+        plt.tight_layout()
+        cer_vs_segmentation_path = os.path.join(images_dir, 'cer_vs_segmentation.png')
+        plt.savefig(cer_vs_segmentation_path, dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    # =========================================================================
     # Génération du rapport Markdown
     # =========================================================================
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -578,6 +662,71 @@ Ce graphe montre la relation entre le nombre de pages d'entraînement par docume
 | Corrélation CER/entraînement | {correlation:.3f} |
 
 """
+    
+    # Ajouter la section CER vs Segmentation si le graphe a été généré
+    if cer_vs_segmentation_path:
+        seg_rates = [d['seg_error_rate'] for d in docs_segmentation_data]
+        seg_cers = [d['cer'] for d in docs_segmentation_data]
+        seg_correlation = np.corrcoef(seg_rates, seg_cers)[0, 1] if len(seg_rates) > 2 else 0
+        
+        # Compter les documents par quadrant
+        median_seg = np.median(seg_rates)
+        median_cer_seg = np.median(seg_cers)
+        
+        q1_count = sum(1 for s, c in zip(seg_rates, seg_cers) if s < median_seg and c < median_cer_seg)  # Bonne seg, bonne transcription
+        q2_count = sum(1 for s, c in zip(seg_rates, seg_cers) if s >= median_seg and c < median_cer_seg)  # Mauvaise seg, bonne transcription
+        q3_count = sum(1 for s, c in zip(seg_rates, seg_cers) if s < median_seg and c >= median_cer_seg)  # Bonne seg, mauvaise transcription
+        q4_count = sum(1 for s, c in zip(seg_rates, seg_cers) if s >= median_seg and c >= median_cer_seg)  # Mauvaise seg, mauvaise transcription
+        
+        total_missing = sum(d['missing_lines'] for d in docs_segmentation_data)
+        total_extra = sum(d['extra_lines'] for d in docs_segmentation_data)
+        
+        markdown_content += f"""---
+
+## 🎯 CER vs Erreurs de Segmentation
+
+Ce graphe permet d'identifier si les erreurs sont principalement dues à la **transcription** ou à la **segmentation** (lignes oubliées, fusionnées, ou splittées).
+
+![CER vs Segmentation]({os.path.relpath(cer_vs_segmentation_path, output_dir)})
+
+### Interprétation des quadrants
+
+| Quadrant | Description | Documents |
+|----------|-------------|-----------|
+| 🟢 Bas-Gauche | Bonne segmentation + Bonne transcription | {q1_count} |
+| 🟡 Bas-Droite | Mauvaise segmentation + Transcription OK | {q2_count} |
+| 🔵 Haut-Gauche | Bonne segmentation + Mauvaise transcription | {q3_count} |
+| 🔴 Haut-Droite | Mauvaise segmentation + Mauvaise transcription | {q4_count} |
+
+### Statistiques de segmentation
+
+| Métrique | Valeur |
+|----------|--------|
+| Corrélation Segmentation/CER | {seg_correlation:.3f} |
+| Total lignes manquantes | {total_missing} |
+| Total lignes en trop | {total_extra} |
+| Médiane taux erreur seg. | {median_seg:.1f}% |
+| Médiane CER | {median_cer_seg:.1f}% |
+
+### Diagnostic
+
+"""
+        # Ajouter des diagnostics automatiques
+        if seg_correlation > 0.5:
+            markdown_content += f"- ⚠️ **Forte corrélation ({seg_correlation:.2f})** : Les erreurs de CER sont largement dues aux problèmes de segmentation\n"
+        elif seg_correlation > 0.3:
+            markdown_content += f"- ℹ️ **Corrélation modérée ({seg_correlation:.2f})** : La segmentation contribue partiellement au CER\n"
+        else:
+            markdown_content += f"- ✅ **Faible corrélation ({seg_correlation:.2f})** : Les erreurs de CER sont principalement dues à la transcription, pas à la segmentation\n"
+        
+        if q2_count > q3_count:
+            markdown_content += f"- 📊 **{q2_count} documents** ont des problèmes de segmentation mais une transcription correcte → améliorer la détection de lignes\n"
+        if q3_count > q2_count:
+            markdown_content += f"- 📊 **{q3_count} documents** ont une bonne segmentation mais des erreurs de transcription → améliorer le modèle de transcription\n"
+        if q4_count > 0:
+            markdown_content += f"- 🔴 **{q4_count} documents critiques** combinent problèmes de segmentation ET transcription\n"
+
+        markdown_content += "\n"
     
     # Ajouter la section analyse des erreurs si disponible
     if error_stats and errors_path:
