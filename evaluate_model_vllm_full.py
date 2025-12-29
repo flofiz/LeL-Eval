@@ -118,12 +118,29 @@ async def run_evaluation_async(api_url: str,
     print("Agrégation des statistiques d'erreurs...")
     error_stats = aggregate_error_stats(all_page_analyses) if all_page_analyses else None
     
-    # Calcul des moyennes par page - CER pondéré par caractères
+    # =========================================================================
+    # CALCUL DES MÉTRIQUES AVEC PONDÉRATION APPROPRIÉE
+    # =========================================================================
+    # 
+    # NIVEAU PAGE (micro-average):
+    #   CER = somme(edit_distance) / somme(gt_chars)
+    #   Pondéré par le nombre de caractères pour éviter qu'une page courte
+    #   biaise le résultat.
+    #
+    # NIVEAU DOCUMENT (micro-average par doc, puis macro-average sur corpus):
+    #   CER_doc = somme(edit_distance_pages) / somme(gt_chars_pages)
+    #   CER_corpus = moyenne(CER_doc pour chaque document)
+    #   Chaque document a le même poids, évite le biais des documents
+    #   sur-représentés (avec beaucoup de pages).
+    # =========================================================================
+    
+    # --- NIVEAU PAGE (micro-average) ---
+    # CER pondéré par caractères (une page avec plus de texte a plus de poids)
     total_edit_dist_all = sum(m['total_edit_distance'] for m in all_metrics)
     total_chars_all = sum(m['total_gt_chars'] for m in all_metrics)
-    avg_cer = total_edit_dist_all / total_chars_all if total_chars_all > 0 else 1.0
+    micro_avg_cer = total_edit_dist_all / total_chars_all if total_chars_all > 0 else 1.0
     
-    # Calculer les CER variants globaux (niveau page)
+    # CER variants (micro-average niveau page)
     page_cer_variants = {}
     for variant_name in NORMALIZATIONS.keys():
         edit_dist_key = f'total_edit_distance_{variant_name}'
@@ -132,29 +149,29 @@ async def run_evaluation_async(api_url: str,
         variant_chars = sum(m[chars_key] for m in all_metrics)
         page_cer_variants[variant_name] = variant_edit_dist / variant_chars if variant_chars > 0 else 1.0
     
+    # Autres métriques page (moyenne simple ok car déjà normalisées entre 0-1)
     avg_iou = np.mean([m['iou'] for m in all_metrics])
     avg_format = np.mean([m['format_score'] for m in all_metrics])
     avg_recall = np.mean([m['recall'] for m in all_metrics])
     avg_precision = np.mean([m['precision'] for m in all_metrics])
     
-    # Calcul des statistiques par document
+    # --- NIVEAU DOCUMENT ---
     document_stats = compute_per_document_stats(all_metrics)
     num_documents = len(document_stats)
     
-    # Moyennes au niveau document - CER pondéré par caractères
-    doc_total_edit_dist = sum(d['total_edit_distance'] for d in document_stats.values())
-    doc_total_chars = sum(d['total_gt_chars'] for d in document_stats.values())
-    doc_avg_cer = doc_total_edit_dist / doc_total_chars if doc_total_chars > 0 else 1.0
+    # CER corpus (macro-average): moyenne des CER par document
+    # Chaque document compte égal, peu importe sa taille
+    doc_cers = [d['avg_cer'] for d in document_stats.values()]
+    macro_avg_cer = np.mean(doc_cers) if doc_cers else 1.0
     
-    # Calculer les CER variants globaux (niveau document)
+    # CER variants (macro-average sur documents)
     doc_cer_variants = {}
     for variant_name in NORMALIZATIONS.keys():
-        edit_dist_key = f'total_edit_distance_{variant_name}'
-        chars_key = f'total_gt_chars_{variant_name}'
-        variant_edit_dist = sum(d[edit_dist_key] for d in document_stats.values())
-        variant_chars = sum(d[chars_key] for d in document_stats.values())
-        doc_cer_variants[variant_name] = variant_edit_dist / variant_chars if variant_chars > 0 else 1.0
+        variant_key = f'avg_cer_{variant_name}'
+        doc_variant_cers = [d[variant_key] for d in document_stats.values()]
+        doc_cer_variants[variant_name] = np.mean(doc_variant_cers) if doc_variant_cers else 1.0
     
+    # Autres métriques document (macro-average)
     doc_avg_iou = np.mean([d['avg_iou'] for d in document_stats.values()])
     doc_avg_format = np.mean([d['avg_format_score'] for d in document_stats.values()])
     doc_avg_recall = np.mean([d['avg_recall'] for d in document_stats.values()])
@@ -162,19 +179,19 @@ async def run_evaluation_async(api_url: str,
     
     # Affichage des résultats
     _print_results(
-        all_metrics, avg_cer, page_cer_variants, avg_iou, avg_format, avg_recall, avg_precision,
-        document_stats, num_documents, doc_avg_cer, doc_cer_variants, doc_avg_iou,
+        all_metrics, micro_avg_cer, page_cer_variants, avg_iou, avg_format, avg_recall, avg_precision,
+        document_stats, num_documents, macro_avg_cer, doc_cer_variants, doc_avg_iou,
         doc_avg_format, doc_avg_recall, doc_avg_precision, error_stats
     )
     
     # Construire les dictionnaires de statistiques
     per_page_summary = _build_page_summary(
-        avg_cer, avg_iou, avg_format, avg_recall, avg_precision,
+        micro_avg_cer, avg_iou, avg_format, avg_recall, avg_precision,
         len(all_metrics), page_cer_variants
     )
     
     per_document_summary = _build_document_summary(
-        doc_avg_cer, doc_avg_iou, doc_avg_format, doc_avg_recall, doc_avg_precision,
+        macro_avg_cer, doc_avg_iou, doc_avg_format, doc_avg_recall, doc_avg_precision,
         num_documents, doc_cer_variants
     )
     
@@ -218,37 +235,38 @@ async def run_evaluation_async(api_url: str,
 
 
 def _print_results(
-    all_metrics, avg_cer, page_cer_variants, avg_iou, avg_format, avg_recall, avg_precision,
-    document_stats, num_documents, doc_avg_cer, doc_cer_variants, doc_avg_iou,
+    all_metrics, micro_avg_cer, page_cer_variants, avg_iou, avg_format, avg_recall, avg_precision,
+    document_stats, num_documents, macro_avg_cer, doc_cer_variants, doc_avg_iou,
     doc_avg_format, doc_avg_recall, doc_avg_precision, error_stats
 ):
     """Affiche les résultats de l'évaluation dans la console."""
     print("\n" + "="*70)
     print("RÉSULTATS DE L'ÉVALUATION")
     print("="*70)
-    print(f"\n--- STATISTIQUES PAR PAGE ({len(all_metrics)} pages) ---")
-    print(f"CER moyen (base):       {avg_cer:.4f}")
-    print(f"  ├─ sans accents:      {page_cer_variants['no_accents']:.4f}")
-    print(f"  ├─ minuscules:        {page_cer_variants['lowercase']:.4f}")
-    print(f"  ├─ chars normalisés:  {page_cer_variants['normalized_chars']:.4f}")
-    print(f"  ├─ sans ponctuation:  {page_cer_variants['no_punctuation']:.4f}")
-    print(f"  └─ normalisé complet: {page_cer_variants['normalized']:.4f}")
-    print(f"IoU orienté moyen:      {avg_iou:.4f}")
-    print(f"Score de formatage:     {avg_format:.4f}")
-    print(f"Recall moyen:           {avg_recall:.4f}")
-    print(f"Precision moyenne:      {avg_precision:.4f}")
     
-    print(f"\n--- STATISTIQUES PAR DOCUMENT ({num_documents} documents) ---")
-    print(f"CER moyen (base):       {doc_avg_cer:.4f}")
-    print(f"  ├─ sans accents:      {doc_cer_variants['no_accents']:.4f}")
-    print(f"  ├─ minuscules:        {doc_cer_variants['lowercase']:.4f}")
-    print(f"  ├─ chars normalisés:  {doc_cer_variants['normalized_chars']:.4f}")
-    print(f"  ├─ sans ponctuation:  {doc_cer_variants['no_punctuation']:.4f}")
-    print(f"  └─ normalisé complet: {doc_cer_variants['normalized']:.4f}")
-    print(f"IoU orienté moyen:      {doc_avg_iou:.4f}")
-    print(f"Score de formatage:     {doc_avg_format:.4f}")
-    print(f"Recall moyen:           {doc_avg_recall:.4f}")
-    print(f"Precision moyenne:      {doc_avg_precision:.4f}")
+    # Niveau page (micro-average: pondéré par caractères)
+    print(f"\n--- NIVEAU PAGE - Micro-Average ({len(all_metrics)} pages) ---")
+    print(f"CER (pondéré par caractères): {micro_avg_cer:.4f}")
+    print(f"  ├─ sans accents:            {page_cer_variants['no_accents']:.4f}")
+    print(f"  ├─ minuscules:              {page_cer_variants['lowercase']:.4f}")
+    print(f"  ├─ chars normalisés:        {page_cer_variants['normalized_chars']:.4f}")
+    print(f"  ├─ sans ponctuation:        {page_cer_variants['no_punctuation']:.4f}")
+    print(f"  └─ normalisé complet:       {page_cer_variants['normalized']:.4f}")
+    print(f"IoU moyen:                    {avg_iou:.4f}")
+    print(f"Recall moyen:                 {avg_recall:.4f}")
+    print(f"Precision moyenne:            {avg_precision:.4f}")
+    
+    # Niveau corpus (macro-average: moyenne des CER par document)
+    print(f"\n--- NIVEAU CORPUS - Macro-Average ({num_documents} documents) ---")
+    print(f"CER (moyenne par document):   {macro_avg_cer:.4f}")
+    print(f"  ├─ sans accents:            {doc_cer_variants['no_accents']:.4f}")
+    print(f"  ├─ minuscules:              {doc_cer_variants['lowercase']:.4f}")
+    print(f"  ├─ chars normalisés:        {doc_cer_variants['normalized_chars']:.4f}")
+    print(f"  ├─ sans ponctuation:        {doc_cer_variants['no_punctuation']:.4f}")
+    print(f"  └─ normalisé complet:       {doc_cer_variants['normalized']:.4f}")
+    print(f"IoU moyen:                    {doc_avg_iou:.4f}")
+    print(f"Recall moyen:                 {doc_avg_recall:.4f}")
+    print(f"Precision moyenne:            {doc_avg_precision:.4f}")
     
     # Afficher le détail par document
     print(f"\n--- DÉTAIL PAR DOCUMENT ---")
