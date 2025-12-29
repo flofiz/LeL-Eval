@@ -610,6 +610,30 @@ def load_test_data(json_path: str) -> List[Dict]:
     return data["test"]
 
 
+def load_training_data(json_path: str) -> List[Dict]:
+    """Charge les données d'entraînement depuis le fichier JSON"""
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    return data.get("train", [])
+
+
+def count_training_pages_per_document(train_data: List[Dict]) -> Dict[str, int]:
+    """
+    Compte le nombre de pages d'entraînement par document.
+    
+    Args:
+        train_data: Liste des échantillons d'entraînement
+        
+    Returns:
+        Dictionnaire {nom_document: nombre_pages}
+    """
+    pages_per_doc = defaultdict(int)
+    for sample in train_data:
+        doc_name = get_document_name(sample['name'])
+        pages_per_doc[doc_name] += 1
+    return dict(pages_per_doc)
+
+
 def get_image_dimensions(base64_image: str) -> Tuple[int, int]:
     """Récupère les dimensions d'une image base64"""
     image_data = base64.b64decode(base64_image)
@@ -800,6 +824,7 @@ def generate_markdown_report(
     error_stats: Optional[Dict],
     page_cer_variants: Dict[str, float],
     doc_cer_variants: Dict[str, float],
+    training_pages_per_doc: Optional[Dict[str, int]] = None,
     output_dir: str = ".",
     report_name: str = "evaluation_report"
 ) -> str:
@@ -812,6 +837,7 @@ def generate_markdown_report(
         error_stats: Statistiques d'erreurs agrégées
         page_cer_variants: CER variants au niveau page
         doc_cer_variants: CER variants au niveau document
+        training_pages_per_doc: Nombre de pages d'entraînement par document
         output_dir: Dossier de sortie pour les images
         report_name: Nom de base du rapport
     
@@ -860,6 +886,29 @@ def generate_markdown_report(
     plt.tight_layout()
     cer_dist_path = os.path.join(images_dir, 'cer_distribution.png')
     plt.savefig(cer_dist_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # =========================================================================
+    # Graphe 1b: Distribution du CER normalisé par page
+    # =========================================================================
+    fig, ax = plt.subplots(figsize=(10, 5))
+    cer_normalized_values = [m['cer_normalized'] * 100 for m in all_metrics]  # CER normalisé en %
+    
+    ax.hist(cer_normalized_values, bins=30, color=colors['secondary'], alpha=0.7, edgecolor='white')
+    ax.axvline(np.mean(cer_normalized_values), color=colors['danger'], linestyle='--', 
+               linewidth=2, label=f'Moyenne: {np.mean(cer_normalized_values):.1f}%')
+    ax.axvline(np.median(cer_normalized_values), color=colors['success'], linestyle='--', 
+               linewidth=2, label=f'Médiane: {np.median(cer_normalized_values):.1f}%')
+    
+    ax.set_xlabel('CER normalisé (%)', fontsize=12)
+    ax.set_ylabel('Nombre de pages', fontsize=12)
+    ax.set_title('Distribution du CER Normalisé par page (sans accents, minuscules, sans ponctuation)', 
+                fontsize=14, fontweight='bold')
+    ax.legend(loc='upper right')
+    
+    plt.tight_layout()
+    cer_normalized_dist_path = os.path.join(images_dir, 'cer_normalized_distribution.png')
+    plt.savefig(cer_normalized_dist_path, dpi=150, bbox_inches='tight')
     plt.close()
     
     # =========================================================================
@@ -1095,6 +1144,55 @@ def generate_markdown_report(
     plt.close()
     
     # =========================================================================
+    # Graphe 8: CER vs Nombre de pages d'entraînement par document
+    # =========================================================================
+    cer_vs_training_path = None
+    # Préparer les données: pour chaque document testé, obtenir le CER et le nb de pages d'entraînement
+    docs_with_training = []
+    for doc_name, stats in document_stats.items():
+        train_pages = training_pages_per_doc.get(doc_name, 0) if training_pages_per_doc else 0
+        docs_with_training.append({
+            'name': doc_name,
+            'cer': stats['avg_cer'] * 100,
+            'train_pages': train_pages
+        })
+    
+    if docs_with_training and training_pages_per_doc:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        train_pages_list = [d['train_pages'] for d in docs_with_training]
+        cer_list = [d['cer'] for d in docs_with_training]
+        
+        # Scatter plot avec couleur selon le CER
+        scatter = ax.scatter(train_pages_list, cer_list, alpha=0.7, c=cer_list, 
+                            cmap='RdYlGn_r', edgecolors='white', s=80)
+        
+        # Ligne de tendance si assez de points
+        if len(train_pages_list) > 2:
+            z = np.polyfit(train_pages_list, cer_list, 1)
+            p = np.poly1d(z)
+            x_trend = np.linspace(min(train_pages_list), max(train_pages_list), 100)
+            ax.plot(x_trend, p(x_trend), '--', color=colors['primary'], linewidth=2,
+                   label=f'Tendance (pente: {z[0]:.2f})')
+            
+            # Calculer la corrélation
+            correlation = np.corrcoef(train_pages_list, cer_list)[0, 1]
+            ax.text(0.02, 0.98, f'Corrélation: {correlation:.3f}', 
+                   transform=ax.transAxes, fontsize=10, verticalalignment='top',
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        ax.set_xlabel('Nombre de pages d\'entraînement', fontsize=12)
+        ax.set_ylabel('CER moyen (%)', fontsize=12)
+        ax.set_title('CER par Document vs Données d\'Entraînement', fontsize=14, fontweight='bold')
+        ax.legend(loc='upper right')
+        
+        plt.colorbar(scatter, ax=ax, label='CER (%)')
+        plt.tight_layout()
+        cer_vs_training_path = os.path.join(images_dir, 'cer_vs_training.png')
+        plt.savefig(cer_vs_training_path, dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    # =========================================================================
     # Génération du rapport Markdown
     # =========================================================================
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1151,7 +1249,27 @@ Le graphe ci-dessous montre la distribution du Character Error Rate (CER) sur l'
 
 ---
 
-## 🔄 Impact des Normalisations
+## � Distribution du CER Normalisé
+
+Le graphe ci-dessous montre la distribution du CER après normalisation du texte (sans accents, minuscules, sans ponctuation).
+Cette métrique montre la qualité de la transcription indépendamment des erreurs de casse et de ponctuation.
+
+![Distribution du CER Normalisé]({os.path.relpath(cer_normalized_dist_path, output_dir)})
+
+### Statistiques de distribution (CER normalisé)
+
+| Statistique | Valeur |
+|-------------|--------|
+| Moyenne | {np.mean(cer_normalized_values):.2f}% |
+| Médiane | {np.median(cer_normalized_values):.2f}% |
+| Écart-type | {np.std(cer_normalized_values):.2f}% |
+| Min | {np.min(cer_normalized_values):.2f}% |
+| Max | {np.max(cer_normalized_values):.2f}% |
+| Gain moyen vs CER base | {np.mean(cer_array) - np.mean(cer_normalized_values):.2f}pp |
+
+---
+
+## �🔄 Impact des Normalisations
 
 Ce graphe compare le CER selon différentes stratégies de normalisation, permettant d'identifier si les erreurs sont principalement dues à la casse, aux accents ou à la ponctuation.
 
@@ -1231,6 +1349,34 @@ Ce graphe montre la relation entre le nombre de lignes par page et le taux d'err
 | Lignes GT total | {total_lines_gt} |
 | Lignes prédites total | {total_lines_pred} |
 | Lignes matchées | {total_matched} |
+
+"""
+    
+    # Ajouter la section CER vs Training si le graphe a été généré
+    if cer_vs_training_path:
+        # Calculer les stats pour le tableau
+        train_pages_list = [d['train_pages'] for d in docs_with_training]
+        cer_list = [d['cer'] for d in docs_with_training]
+        correlation = np.corrcoef(train_pages_list, cer_list)[0, 1] if len(train_pages_list) > 2 else 0
+        
+        docs_with_zero_training = sum(1 for t in train_pages_list if t == 0)
+        
+        markdown_content += f"""---
+
+## 📈 CER vs Pages d'Entraînement
+
+Ce graphe montre la relation entre le nombre de pages d'entraînement par document et le CER obtenu en test.
+
+![CER vs Training]({os.path.relpath(cer_vs_training_path, output_dir)})
+
+### Statistiques d'entraînement
+
+| Métrique | Valeur |
+|----------|--------|
+| Total pages d'entraînement | {sum(train_pages_list)} |
+| Moyenne pages/document | {np.mean(train_pages_list):.1f} |
+| Documents sans entraînement | {docs_with_zero_training} |
+| Corrélation CER/entraînement | {correlation:.3f} |
 
 """
     
@@ -1374,7 +1520,14 @@ async def run_evaluation_async(api_url: str,
     
     print("Chargement des données de test...")
     test_data = load_test_data(test_json_path)
-    print(f"Nombre d'échantillons: {len(test_data)}")
+    print(f"Nombre d'échantillons de test: {len(test_data)}")
+    
+    # Charger les données d'entraînement pour l'analyse CER vs training
+    print("Chargement des données d'entraînement...")
+    train_data = load_training_data(test_json_path)
+    training_pages_per_doc = count_training_pages_per_document(train_data)
+    print(f"Nombre d'échantillons d'entraînement: {len(train_data)}")
+    print(f"Documents avec données d'entraînement: {len(training_pages_per_doc)}")
     
     # Créer le dossier de sortie si nécessaire
     if output_dir:
@@ -1572,6 +1725,7 @@ async def run_evaluation_async(api_url: str,
         error_stats=error_stats,
         page_cer_variants=page_cer_variants,
         doc_cer_variants=doc_cer_variants,
+        training_pages_per_doc=training_pages_per_doc,
         output_dir=report_output_dir,
         report_name="evaluation_report"
     )
