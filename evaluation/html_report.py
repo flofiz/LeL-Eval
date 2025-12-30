@@ -962,25 +962,51 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 }}, {{ responsive: true }});
             }}
             
-            // CER vs Complexité
-            Plotly.react('cer-complexity', [{{
-                x: pageLines,
-                y: pageCers,
-                mode: 'markers',
-                type: 'scatter',
-                name: 'Pages',
-                marker: {{ color: pageCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
-                text: pageNames,
-                hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
-            }}], {{
-                xaxis: {{ title: 'Nombre de lignes' }},
-                yaxis: {{ title: 'CER (%)', type: scaleStates['cer-complexity'] === false ? 'linear' : 'log', range: scaleStates['cer-complexity'] === false ? [0, 100] : [0, 2] }},
-                margin: {{ l: 60, r: 30, t: 30, b: 50 }},
-                shapes: [
-                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
-                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
-                ]
-            }}, {{ responsive: true }});
+            // CER vs Complexité avec trendline
+            const n = pageLines.length;
+            if (n >= 2) {{
+                const sumX = pageLines.reduce((a, b) => a + b, 0);
+                const sumY = pageCers.reduce((a, b) => a + b, 0);
+                const sumXY = pageLines.reduce((acc, xi, i) => acc + xi * pageCers[i], 0);
+                const sumX2 = pageLines.reduce((acc, xi) => acc + xi * xi, 0);
+                const sumY2 = pageCers.reduce((acc, yi) => acc + yi * yi, 0);
+                const denom = n * sumX2 - sumX * sumX;
+                const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+                const intercept = (sumY - slope * sumX) / n;
+                const xMin = Math.min(...pageLines);
+                const xMax = Math.max(...pageLines);
+                const corrDenom = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+                const correlation = corrDenom > 0 ? (n * sumXY - sumX * sumY) / corrDenom : 0;
+                
+                Plotly.react('cer-complexity', [
+                    {{
+                        x: pageLines,
+                        y: pageCers,
+                        mode: 'markers',
+                        type: 'scatter',
+                        name: 'Pages',
+                        marker: {{ color: pageCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
+                        text: pageNames,
+                        hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
+                    }},
+                    {{
+                        x: [xMin, xMax],
+                        y: [slope * xMin + intercept, slope * xMax + intercept],
+                        mode: 'lines',
+                        type: 'scatter',
+                        name: 'Tendance (r=' + correlation.toFixed(2) + ')',
+                        line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
+                    }}
+                ], {{
+                    xaxis: {{ title: 'Nombre de lignes' }},
+                    yaxis: {{ title: 'CER (%)', type: scaleStates['cer-complexity'] === false ? 'linear' : 'log', range: scaleStates['cer-complexity'] === false ? [0, 100] : [0, 2] }},
+                    margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                    shapes: [
+                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+                    ]
+                }}, {{ responsive: true }});
+            }}
             
             // CER vs Perplexité
             const pagePerps = filteredIndices.map(i => reportData.page_perplexities[i]);
@@ -995,17 +1021,42 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 }}
             }}
             
-            if (validPerp.length > 0) {{
-                Plotly.react('cer-perplexity', [{{
-                    x: validPerp,
-                    y: validCersPerp,
-                    mode: 'markers',
-                    type: 'scatter',
-                    name: 'Pages',
-                    marker: {{ color: validCersPerp, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
-                    text: validNamesPerp,
-                    hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.2f}}<br>CER: %{{y:.2f}}%<extra></extra>'
-                }}], {{
+            if (validPerp.length >= 2) {{
+                // Calcul trendline pour perplexité
+                const nP = validPerp.length;
+                const sumXP = validPerp.reduce((a, b) => a + b, 0);
+                const sumYP = validCersPerp.reduce((a, b) => a + b, 0);
+                const sumXYP = validPerp.reduce((acc, xi, i) => acc + xi * validCersPerp[i], 0);
+                const sumX2P = validPerp.reduce((acc, xi) => acc + xi * xi, 0);
+                const sumY2P = validCersPerp.reduce((acc, yi) => acc + yi * yi, 0);
+                const denomP = nP * sumX2P - sumXP * sumXP;
+                const slopeP = denomP !== 0 ? (nP * sumXYP - sumXP * sumYP) / denomP : 0;
+                const interceptP = (sumYP - slopeP * sumXP) / nP;
+                const xMinP = Math.min(...validPerp);
+                const xMaxP = Math.max(...validPerp);
+                const corrDenomP = Math.sqrt((nP * sumX2P - sumXP * sumXP) * (nP * sumY2P - sumYP * sumYP));
+                const correlationP = corrDenomP > 0 ? (nP * sumXYP - sumXP * sumYP) / corrDenomP : 0;
+                
+                Plotly.react('cer-perplexity', [
+                    {{
+                        x: validPerp,
+                        y: validCersPerp,
+                        mode: 'markers',
+                        type: 'scatter',
+                        name: 'Pages',
+                        marker: {{ color: validCersPerp, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
+                        text: validNamesPerp,
+                        hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.2f}}<br>CER: %{{y:.2f}}%<extra></extra>'
+                    }},
+                    {{
+                        x: [xMinP, xMaxP],
+                        y: [slopeP * xMinP + interceptP, slopeP * xMaxP + interceptP],
+                        mode: 'lines',
+                        type: 'scatter',
+                        name: 'Tendance (r=' + correlationP.toFixed(2) + ')',
+                        line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
+                    }}
+                ], {{
                     xaxis: {{ title: 'Perplexité' }},
                     yaxis: {{ title: 'CER (%)', type: scaleStates['cer-perplexity'] === false ? 'linear' : 'log', range: scaleStates['cer-perplexity'] === false ? [0, 100] : [0, 2] }},
                     margin: {{ l: 60, r: 30, t: 30, b: 50 }},
