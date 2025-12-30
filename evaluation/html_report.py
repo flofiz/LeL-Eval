@@ -432,14 +432,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             title: '',
             xaxis: {{ title: 'CER (%)' }},
             yaxis: {{ title: 'Nombre de pages' }},
-            shapes: [{{
-                type: 'line', x0: {mean_cer}, x1: {mean_cer}, y0: 0, y1: 1, yref: 'paper',
-                line: {{ color: '#EF4444', width: 2, dash: 'dash' }}
-            }}],
-            annotations: [{{
-                x: {mean_cer}, y: 1, yref: 'paper', text: 'Moyenne: {mean_cer:.1f}%',
-                showarrow: false, yanchor: 'bottom'
-            }}]
+            shapes: [
+                {{ type: 'line', x0: {mean_cer}, x1: {mean_cer}, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                {{ type: 'line', x0: {median_cer}, x1: {median_cer}, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
+            ],
+            annotations: [
+                {{ x: {mean_cer}, y: 1, yref: 'paper', text: 'Moyenne: {mean_cer:.1f}%', showarrow: false, yanchor: 'bottom', font: {{ color: '#EF4444' }} }},
+                {{ x: {median_cer}, y: 0.9, yref: 'paper', text: 'Médiane: {median_cer:.1f}%', showarrow: false, yanchor: 'bottom', font: {{ color: '#10B981' }} }}
+            ]
         }}, {{ responsive: true }});
         
         // Distribution IoU
@@ -450,7 +450,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             nbinsx: 30
         }}], {{
             xaxis: {{ title: 'IoU (%)' }},
-            yaxis: {{ title: 'Nombre de pages' }}
+            yaxis: {{ title: 'Nombre de pages' }},
+            shapes: [
+                {{ type: 'line', x0: {avg_iou}, x1: {avg_iou}, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                {{ type: 'line', x0: {median_iou}, x1: {median_iou}, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#4F46E5', width: 2, dash: 'dot' }} }}
+            ],
+            annotations: [
+                {{ x: {avg_iou}, y: 1, yref: 'paper', text: 'Moyenne: {avg_iou:.1f}%', showarrow: false, yanchor: 'bottom', font: {{ color: '#EF4444' }} }},
+                {{ x: {median_iou}, y: 0.9, yref: 'paper', text: 'Médiane: {median_iou:.1f}%', showarrow: false, yanchor: 'bottom', font: {{ color: '#4F46E5' }} }}
+            ]
         }}, {{ responsive: true }});
         
         // Variantes CER
@@ -888,6 +896,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             // Distribution CER
             if (pageCers.length > 0) {{
                 const meanCer = pageCers.reduce((a, b) => a + b, 0) / pageCers.length;
+                const sortedCers = [...pageCers].sort((a, b) => a - b);
+                const medianCer = sortedCers.length % 2 === 0 
+                    ? (sortedCers[sortedCers.length/2-1] + sortedCers[sortedCers.length/2]) / 2 
+                    : sortedCers[Math.floor(sortedCers.length/2)];
                 Plotly.react('cer-distribution', [{{
                     x: pageCers,
                     type: 'histogram',
@@ -896,14 +908,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 }}], {{
                     xaxis: {{ title: 'CER (%)' }},
                     yaxis: {{ title: 'Nombre de pages' }},
-                    shapes: [{{
-                        type: 'line', x0: meanCer, x1: meanCer, y0: 0, y1: 1, yref: 'paper',
-                        line: {{ color: '#EF4444', width: 2, dash: 'dash' }}
-                    }}],
-                    annotations: [{{
-                        x: meanCer, y: 1, yref: 'paper', text: 'Moyenne: ' + meanCer.toFixed(1) + '%',
-                        showarrow: false, yanchor: 'bottom'
-                    }}]
+                    shapes: [
+                        {{ type: 'line', x0: meanCer, x1: meanCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                        {{ type: 'line', x0: medianCer, x1: medianCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
+                    ],
+                    annotations: [
+                        {{ x: meanCer, y: 1, yref: 'paper', text: 'Moyenne: ' + meanCer.toFixed(1) + '%', showarrow: false, yanchor: 'bottom', font: {{ color: '#EF4444' }} }},
+                        {{ x: medianCer, y: 0.9, yref: 'paper', text: 'Médiane: ' + medianCer.toFixed(1) + '%', showarrow: false, yanchor: 'bottom', font: {{ color: '#10B981' }} }}
+                    ]
                 }}, {{ responsive: true }});
             }}
             
@@ -1043,10 +1055,13 @@ def generate_html_report(
     bias_interpretation = "Corpus équilibré" if abs(cer_bias) <= 1 else ("Biais modéré" if abs(cer_bias) <= 3 else "Biais important")
     
     avg_iou = np.mean([m['iou'] * 100 for m in all_metrics])
+    median_iou = np.median([m['iou'] * 100 for m in all_metrics])
     avg_precision = np.mean([m['precision'] * 100 for m in all_metrics])
     avg_recall = np.mean([m['recall'] * 100 for m in all_metrics])
     avg_format = np.mean([m['format_score'] * 100 for m in all_metrics])
     mean_cer = np.mean([m['cer'] * 100 for m in all_metrics])
+    median_cer = np.median([m['cer'] * 100 for m in all_metrics])  # Micro-median
+    macro_median_cer = np.median(doc_cers_list) if doc_cers_list else 100.0  # Macro-median
     
     # Préparer les données pour les graphiques
     page_cers = [m['cer'] * 100 for m in all_metrics]
@@ -1196,10 +1211,12 @@ def generate_html_report(
         bias_color=bias_color,
         bias_interpretation=bias_interpretation,
         avg_iou=avg_iou,
+        median_iou=median_iou,
         avg_precision=avg_precision,
         avg_recall=avg_recall,
         avg_format=avg_format,
         mean_cer=mean_cer,
+        median_cer=median_cer,
         accuracy=accuracy,
         doc_table_rows=doc_table_rows,
         error_stats_html=error_stats_html,
