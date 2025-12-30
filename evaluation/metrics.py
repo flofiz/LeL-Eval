@@ -12,6 +12,7 @@ import numpy as np
 import editdistance
 from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
+from scipy.optimize import linear_sum_assignment
 
 from .models import BBox
 from .normalization import NORMALIZATIONS
@@ -159,41 +160,99 @@ def evaluate_format(predicted_tsv: str, ground_truth_tsv: str) -> float:
     return score
 
 
-def match_predictions_to_ground_truth(predictions: List[BBox], 
-                                     ground_truths: List[BBox]) -> List[Tuple[BBox, BBox]]:
+def match_predictions_to_ground_truth(
+    predictions: List[BBox], 
+    ground_truths: List[BBox],
+    max_cer_threshold: float = 0.95
+) -> Tuple[List[Tuple[BBox, BBox]], Dict]:
     """
-    Apparie les prédictions aux vérités terrain basé sur l'IoU maximal.
+    Apparie les prédictions aux vérités terrain en utilisant l'algorithme hongrois
+    pour minimiser le CER total.
+    
+    Amélioration par rapport au matching greedy IoU:
+    - Utilise une matrice de coûts basée sur le CER symétrique
+    - Trouve le matching optimal global (algorithme hongrois)
+    - Filtre les paires où intersection = 0
+    - Applique un seuil de CER maximum pour éviter les matchs absurdes
     
     Args:
         predictions: Liste des bounding boxes prédites
         ground_truths: Liste des bounding boxes de référence
+        max_cer_threshold: Seuil maximum de CER pour accepter un match (défaut: 0.95)
         
     Returns:
-        Liste de tuples (pred, gt) appariés
+        Tuple (matched_pairs, matching_info) où:
+        - matched_pairs: Liste de tuples (pred, gt) appariés
+        - matching_info: Dict avec informations de débogage (matrice CER, IoU, etc.)
     """
-    matched_pairs = []
-    used_gt_indices = set()
+    n_pred = len(predictions)
+    n_gt = len(ground_truths)
     
-    # Pour chaque prédiction, trouver la meilleure vérité terrain
-    for pred in predictions:
-        best_iou = 0.0
-        best_gt_idx = -1
-        
-        for gt_idx, gt in enumerate(ground_truths):
-            if gt_idx in used_gt_indices:
-                continue
-            
+    if n_pred == 0 or n_gt == 0:
+        return [], {
+            'n_predictions': n_pred,
+            'n_ground_truths': n_gt,
+            'cost_matrix': [],
+            'iou_matrix': [],
+            'matches': []
+        }
+    
+    # 1. Calculer les matrices de coûts et IoU
+    cost_matrix = np.full((n_pred, n_gt), np.inf)  # Inf = impossible
+    iou_matrix = np.zeros((n_pred, n_gt))
+    
+    for i, pred in enumerate(predictions):
+        for j, gt in enumerate(ground_truths):
+            # Calculer IoU pour filtrer les paires impossibles
             iou = calculate_oriented_iou(pred, gt)
-            if iou > best_iou:
-                best_iou = iou
-                best_gt_idx = gt_idx
-        
-        # Appariement si IoU > seuil
-        if best_iou > 0.1 and best_gt_idx != -1:
-            matched_pairs.append((pred, ground_truths[best_gt_idx]))
-            used_gt_indices.add(best_gt_idx)
+            iou_matrix[i, j] = iou
+            
+            # Filtrer: intersection doit être > 0
+            if iou > 0:
+                # Calculer CER symétrique (normalisé par max des longueurs)
+                edit_dist = editdistance.eval(gt.text, pred.text)
+                max_len = max(len(gt.text), len(pred.text))
+                
+                if max_len > 0:
+                    cer_symmetric = edit_dist / max_len
+                    
+                    # Appliquer le seuil de CER
+                    if cer_symmetric <= max_cer_threshold:
+                        cost_matrix[i, j] = cer_symmetric
     
-    return matched_pairs
+    # 2. Appliquer l'algorithme hongrois (minimisation du coût total)
+    # linear_sum_assignment trouve le matching optimal
+    row_indices, col_indices = linear_sum_assignment(cost_matrix)
+    
+    # 3. Extraire les paires matchées valides (coût != inf)
+    matched_pairs = []
+    match_details = []
+    
+    for pred_idx, gt_idx in zip(row_indices, col_indices):
+        cost = cost_matrix[pred_idx, gt_idx]
+        if cost < np.inf:  # Match valide
+            matched_pairs.append((predictions[pred_idx], ground_truths[gt_idx]))
+            match_details.append({
+                'pred_idx': int(pred_idx),
+                'gt_idx': int(gt_idx),
+                'pred_text': predictions[pred_idx].text,
+                'gt_text': ground_truths[gt_idx].text,
+                'cer_symmetric': float(cost),
+                'iou': float(iou_matrix[pred_idx, gt_idx])
+            })
+    
+    # 4. Informations de débogage
+    matching_info = {
+        'n_predictions': n_pred,
+        'n_ground_truths': n_gt,
+        'n_matched': len(matched_pairs),
+        'cost_matrix': cost_matrix.tolist(),
+        'iou_matrix': iou_matrix.tolist(),
+        'matches': match_details,
+        'total_cost': sum(cost_matrix[i, j] for i, j in zip(row_indices, col_indices) if cost_matrix[i, j] < np.inf)
+    }
+    
+    return matched_pairs, matching_info
 
 
 def evaluate_sample(predicted_tsv: str, ground_truth_tsv: str, page_name: str = "") -> Tuple[Dict, Optional[PageErrorAnalysis]]:
@@ -233,7 +292,7 @@ def evaluate_sample(predicted_tsv: str, ground_truth_tsv: str, page_name: str = 
         gt_bboxes = []
     
     # Appariement des prédictions aux vérités terrain
-    matched_pairs = match_predictions_to_ground_truth(pred_bboxes, gt_bboxes)
+    matched_pairs, matching_info = match_predictions_to_ground_truth(pred_bboxes, gt_bboxes)
     
     # Calcul des métriques avec pondération par nombre de caractères
     # CER de base
@@ -369,6 +428,7 @@ def evaluate_sample(predicted_tsv: str, ground_truth_tsv: str, page_name: str = 
         'num_matched': num_matched,
         'num_predicted': len(pred_bboxes),
         'num_ground_truth': num_gt,
+        'matching_info': matching_info,  # Logs de débogage pour LabelMe JSON
     }
     
     # Ajouter les métriques pour chaque variante CER
