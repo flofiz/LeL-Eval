@@ -197,6 +197,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div class="row">
                     <div class="col-12">
                         <div class="card">
+                            <div class="card-header">CER vs Perplexité (confiance du modèle)</div>
+                            <div class="card-body">
+                                <div id="cer-perplexity" class="plotly-graph"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
                             <div class="card-header">CER par Variante de Normalisation</div>
                             <div class="card-body">
                                 <div id="cer-variants" class="plotly-graph"></div>
@@ -449,6 +459,66 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }});
         }})();
         
+        // CER vs Perplexité
+        if (reportData.page_perplexities && reportData.page_perplexities.some(p => p !== null)) {{
+            const validIndices = reportData.page_perplexities.map((p, i) => p !== null ? i : -1).filter(i => i >= 0);
+            const validPerp = validIndices.map(i => reportData.page_perplexities[i]);
+            const validCers = validIndices.map(i => reportData.page_cers[i]);
+            const validNames = validIndices.map(i => reportData.page_names[i]);
+            
+            Plotly.newPlot('cer-perplexity', [{{
+                x: validPerp,
+                y: validCers,
+                mode: 'markers',
+                type: 'scatter',
+                name: 'Pages',
+                marker: {{ 
+                    color: validCers, 
+                    colorscale: 'RdYlGn', 
+                    reversescale: true,
+                    size: 8,
+                    opacity: 0.6
+                }},
+                text: validNames,
+                hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.1f}}<br>CER: %{{y:.2f}}%<extra></extra>'
+            }}], {{
+                xaxis: {{ title: 'Perplexité (+ bas = + confiant)' }},
+                yaxis: {{ title: 'CER (%)' }},
+                margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+            }}, {{ responsive: true }});
+            
+            // Trendline CER vs Perplexité
+            (function() {{
+                const x = validPerp;
+                const y = validCers;
+                const n = x.length;
+                if (n < 2) return;
+                const sumX = x.reduce((a, b) => a + b, 0);
+                const sumY = y.reduce((a, b) => a + b, 0);
+                const sumXY = x.reduce((acc, xi, i) => acc + xi * y[i], 0);
+                const sumX2 = x.reduce((acc, xi) => acc + xi * xi, 0);
+                const denom = n * sumX2 - sumX * sumX;
+                if (Math.abs(denom) < 0.001) return;
+                const slope = (n * sumXY - sumX * sumY) / denom;
+                const intercept = (sumY - slope * sumX) / n;
+                const xMin = Math.min(...x);
+                const xMax = Math.max(...x);
+                const sumY2 = y.reduce((a, b) => a + b*b, 0);
+                const corrDenom = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+                const correlation = corrDenom > 0 ? (n * sumXY - sumX * sumY) / corrDenom : 0;
+                Plotly.addTraces('cer-perplexity', {{
+                    x: [xMin, xMax],
+                    y: [slope * xMin + intercept, slope * xMax + intercept],
+                    mode: 'lines',
+                    type: 'scatter',
+                    name: 'Tendance (r=' + correlation.toFixed(2) + ')',
+                    line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
+                }});
+            }})();
+        }} else {{
+            document.getElementById('cer-perplexity').innerHTML = '<p class="text-muted text-center">Données de perplexité non disponibles</p>';
+        }}
+        
         // CER par document (bar chart horizontal)
         Plotly.newPlot('cer-by-document', [{{
             y: reportData.doc_names,
@@ -679,6 +749,7 @@ def generate_html_report(
     page_ious = [m['iou'] * 100 for m in all_metrics]
     page_lines = [m['num_ground_truth'] for m in all_metrics]
     page_names = [m['name'] for m in all_metrics]
+    page_perplexities = [m.get('perplexity') for m in all_metrics]  # Peut contenir des None
     
     # Données par document (triées par CER)
     sorted_docs = sorted(document_stats.items(), key=lambda x: x[1]['avg_cer'])
@@ -757,6 +828,7 @@ def generate_html_report(
         'page_ious': page_ious,
         'page_lines': page_lines,
         'page_names': page_names,
+        'page_perplexities': page_perplexities,
         'doc_names': doc_names,
         'doc_cers': doc_cers,
         'doc_ious': doc_ious,

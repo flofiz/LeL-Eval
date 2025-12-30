@@ -28,13 +28,18 @@ def image_to_url(base64_image: str) -> str:
     return f"data:image/jpeg;base64,{base64_image}"
 
 
+# Regex pour limiter à Latin-1 (évite les caractères chinois)
+LATIN1_REGEX = r"[\x09\x0A\x0D\x20-\x7E\xA0-\xFF]*"
+
+
 async def call_vllm_api(session: aiohttp.ClientSession,
                        api_url: str,
                        system_prompt: str,
                        user_prompt: str,
                        image_base64: str,
                        temperature: float = 0.0,
-                       max_tokens: int = 2048) -> str:
+                       max_tokens: int = 2048,
+                       use_guided_regex: bool = True) -> Dict:
     """
     Envoie une requête asynchrone à l'API VLLM (format OpenAI).
     
@@ -46,10 +51,12 @@ async def call_vllm_api(session: aiohttp.ClientSession,
         image_base64: Image encodée en base64
         temperature: Température de génération (défaut: 0.0 pour déterministe)
         max_tokens: Nombre maximum de tokens à générer
+        use_guided_regex: Si True, utilise le regex Latin-1 pour éviter les caractères non-latins
         
     Returns:
-        Réponse du modèle (texte)
+        Dict avec 'content' (texte), 'logprobs' (liste), et 'perplexity' (float ou None)
     """
+    import math
     
     # Construire le message avec l'image
     messages = [
@@ -79,8 +86,14 @@ async def call_vllm_api(session: aiohttp.ClientSession,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "top_p": 1.0
+        "top_p": 1.0,
+        "logprobs": True,  # Activer les logprobs pour calculer la perplexité
+        "top_logprobs": 1
     }
+    
+    # Ajouter le guided_regex si activé (extra_body pour compatibilité OpenAI)
+    if use_guided_regex:
+        payload["guided_regex"] = LATIN1_REGEX
     
     try:
         async with session.post(
@@ -90,17 +103,42 @@ async def call_vllm_api(session: aiohttp.ClientSession,
         ) as response:
             if response.status == 200:
                 result = await response.json()
-                return result['choices'][0]['message']['content']
+                content = result['choices'][0]['message']['content']
+                
+                # Extraire les logprobs si disponibles
+                logprobs_data = None
+                perplexity = None
+                
+                choice = result['choices'][0]
+                if 'logprobs' in choice and choice['logprobs'] is not None:
+                    logprobs_content = choice['logprobs'].get('content', [])
+                    if logprobs_content:
+                        # Calculer la perplexité: exp(-moyenne des log probs)
+                        log_probs = []
+                        for token_info in logprobs_content:
+                            if 'logprob' in token_info:
+                                log_probs.append(token_info['logprob'])
+                        
+                        if log_probs:
+                            avg_log_prob = sum(log_probs) / len(log_probs)
+                            perplexity = math.exp(-avg_log_prob)
+                            logprobs_data = log_probs
+                
+                return {
+                    'content': content,
+                    'logprobs': logprobs_data,
+                    'perplexity': perplexity
+                }
             else:
                 error_text = await response.text()
                 print(f"Erreur API (status {response.status}): {error_text}")
-                return ""
+                return {'content': '', 'logprobs': None, 'perplexity': None}
     except asyncio.TimeoutError:
         print("Timeout lors de l'appel API")
-        return ""
+        return {'content': '', 'logprobs': None, 'perplexity': None}
     except Exception as e:
         print(f"Erreur lors de l'appel API: {e}")
-        return ""
+        return {'content': '', 'logprobs': None, 'perplexity': None}
 
 
 async def process_sample(session: aiohttp.ClientSession,
@@ -123,17 +161,20 @@ async def process_sample(session: aiohttp.ClientSession,
         output_dir: Dossier de sortie pour les fichiers LabelMe (optionnel)
         
     Returns:
-        Dictionnaire avec les résultats (name, predicted, ground_truth, full_response)
+        Dictionnaire avec les résultats (name, predicted, ground_truth, full_response, perplexity)
     """
     async with semaphore:
         # Appeler l'API
-        response_text = await call_vllm_api(
+        api_response = await call_vllm_api(
             session,
             api_url,
             system_prompt,
             user_prompt,
             sample['image']
         )
+        
+        response_text = api_response['content']
+        perplexity = api_response['perplexity']
         
         # Extraire le TSV de la réponse
         predicted_tsv = extract_tsv_from_response(response_text)
@@ -168,5 +209,7 @@ async def process_sample(session: aiohttp.ClientSession,
             'name': sample['name'],
             'predicted': predicted_tsv,
             'ground_truth': sample['tsv'],
-            'full_response': response_text
+            'full_response': response_text,
+            'perplexity': perplexity
         }
+

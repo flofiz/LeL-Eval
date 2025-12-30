@@ -111,6 +111,7 @@ async def run_evaluation_async(api_url: str,
             page_name=result['name']
         )
         metrics['name'] = result['name']
+        metrics['perplexity'] = result.get('perplexity')  # Ajouter la perplexité
         all_metrics.append(metrics)
         if page_analysis:
             all_page_analyses.append(page_analysis)
