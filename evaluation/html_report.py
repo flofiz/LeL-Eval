@@ -502,7 +502,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }}], {{
             xaxis: {{ title: 'Nombre de lignes', range: [0, Math.max(...reportData.page_lines) * 1.1] }},
             yaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
-            margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+            margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+            shapes: [
+                {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+            ]
         }}, {{ responsive: true }});
         
         // Ajouter ligne de tendance CER vs Complexité
@@ -553,7 +557,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }}], {{
                 xaxis: {{ title: 'Perplexité (+ bas = + confiant)', range: [0, Math.max(...validPerp) * 1.1] }},
                 yaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
-                margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+                margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                shapes: [
+                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+                ]
             }}, {{ responsive: true }});
             
             // Trendline CER vs Perplexité
@@ -606,7 +614,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }}], {{
             xaxis: {{ title: 'Taux erreur segmentation (%)' }},
             yaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
-            margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+            margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+            shapes: [
+                {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+            ]
         }}, {{ responsive: true }});
         
         // CER par document (bar chart horizontal)
@@ -963,7 +975,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }}], {{
                 xaxis: {{ title: 'Nombre de lignes' }},
                 yaxis: {{ title: 'CER (%)', type: scaleStates['cer-complexity'] === false ? 'linear' : 'log', range: scaleStates['cer-complexity'] === false ? [0, 100] : [0, 2] }},
-                margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+                margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                shapes: [
+                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+                ]
             }}, {{ responsive: true }});
             
             // CER vs Perplexité
@@ -992,7 +1008,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 }}], {{
                     xaxis: {{ title: 'Perplexité' }},
                     yaxis: {{ title: 'CER (%)', type: scaleStates['cer-perplexity'] === false ? 'linear' : 'log', range: scaleStates['cer-perplexity'] === false ? [0, 100] : [0, 2] }},
-                    margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+                    margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                    shapes: [
+                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+                    ]
                 }}, {{ responsive: true }});
             }}
             
@@ -1010,7 +1030,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }}], {{
                 xaxis: {{ title: 'Taux erreur segmentation (%)' }},
                 yaxis: {{ title: 'CER (%)', type: scaleStates['cer-seg-page'] === false ? 'linear' : 'log', range: scaleStates['cer-seg-page'] === false ? [0, 100] : [0, 2] }},
-                margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+                margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                shapes: [
+                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+                ]
             }}, {{ responsive: true }});
             
             // CER par document (ne pas filtrer ici si on veut comparer les docs, ou filtrer si on est en focus doc)
