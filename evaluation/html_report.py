@@ -234,6 +234,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div class="row">
                     <div class="col-12">
                         <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>CER vs Erreurs de Segmentation (par page)</span>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="toggleScale('cer-seg-page')">📊 Échelle Log/Lin</button>
+                            </div>
+                            <div class="card-body">
+                                <div id="cer-seg-page" class="plotly-graph"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
                             <div class="card-header">CER par Variante de Normalisation</div>
                             <div class="card-body">
                                 <div id="cer-variants" class="plotly-graph"></div>
@@ -553,6 +566,27 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }} else {{
             document.getElementById('cer-perplexity').innerHTML = '<p class="text-muted text-center">Données de perplexité non disponibles</p>';
         }}
+        
+        // CER vs Erreurs de Segmentation (par page)
+        Plotly.newPlot('cer-seg-page', [{{
+            x: reportData.page_seg_errors,
+            y: reportData.page_cers,
+            mode: 'markers',
+            type: 'scatter',
+            name: 'Pages',
+            marker: {{ 
+                color: reportData.page_cers,
+                colorscale: 'RdYlGn',
+                size: 8,
+                opacity: 0.6
+            }},
+            text: reportData.page_names,
+            hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
+        }}], {{
+            xaxis: {{ title: 'Taux erreur segmentation (%)' }},
+            yaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
+            margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+        }}, {{ responsive: true }});
         
         // CER par document (bar chart horizontal)
         Plotly.newPlot('cer-by-document', [{{
@@ -919,6 +953,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 }}, {{ responsive: true }});
             }}
             
+            // CER vs Erreurs de Segmentation (par page)
+            const pageSegErrors = filteredIndices.map(i => reportData.page_seg_errors[i]);
+            Plotly.react('cer-seg-page', [{{
+                x: pageSegErrors,
+                y: pageCers,
+                mode: 'markers',
+                type: 'scatter',
+                name: 'Pages',
+                marker: {{ color: pageCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
+                text: pageNames,
+                hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
+            }}], {{
+                xaxis: {{ title: 'Taux erreur segmentation (%)' }},
+                yaxis: {{ title: 'CER (%)', type: scaleStates['cer-seg-page'] === false ? 'linear' : 'log', range: scaleStates['cer-seg-page'] === false ? [0, 100] : [0, 2] }},
+                margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+            }}, {{ responsive: true }});
+            
             // CER par document (ne pas filtrer ici si on veut comparer les docs, ou filtrer si on est en focus doc)
             // Si docFilter != 'all', on pourrait montrer un graphique différent, mais gardons la cohérence.
             const docCers = reportData.doc_cers_by_norm[normKey] || reportData.doc_cers;
@@ -1003,6 +1054,7 @@ def generate_html_report(
     page_lines = [m['num_ground_truth'] for m in all_metrics]
     page_names = [m['name'] for m in all_metrics]
     page_perplexities = [m.get('perplexity') for m in all_metrics]  # Peut contenir des None
+    page_seg_errors = [(1 - m['recall']) * 100 for m in all_metrics]  # Erreurs de segmentation par page
     
     # Données par document (triées par CER)
     sorted_docs = sorted(document_stats.items(), key=lambda x: x[1]['avg_cer'])
@@ -1125,6 +1177,7 @@ def generate_html_report(
         'page_lines': page_lines,
         'page_names': page_names,
         'page_perplexities': page_perplexities,
+        'page_seg_errors': page_seg_errors,
         'doc_names': doc_names,
         'doc_cers': doc_cers,
         'doc_ious': doc_ious,
