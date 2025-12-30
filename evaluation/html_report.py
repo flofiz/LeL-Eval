@@ -108,9 +108,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
     <nav class="navbar navbar-dark mb-4">
-        <div class="container">
+        <div class="container d-flex justify-content-between align-items-center">
             <span class="navbar-brand mb-0 h1">📊 Rapport d'Évaluation OCR</span>
-            <span class="text-light">{timestamp}</span>
+            <div class="d-flex align-items-center gap-3">
+                <div class="d-flex align-items-center">
+                    <label class="text-light me-2 small">Normalisation:</label>
+                    <select id="normSelector" class="form-select form-select-sm" style="width: auto;" onchange="updateNormalization(this.value)">
+                        <option value="base">Base (aucune)</option>
+                        <option value="no_accents">Sans accents</option>
+                        <option value="lowercase">Minuscules</option>
+                        <option value="normalized_chars">Chars normalisés</option>
+                        <option value="no_punctuation">Sans ponctuation</option>
+                        <option value="historical_abbrev">Abbr. historiques</option>
+                        <option value="normalized">Normalisé (tout)</option>
+                    </select>
+                </div>
+                <span class="text-light small">{timestamp}</span>
+            </div>
         </div>
     </nav>
 
@@ -119,14 +133,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="row g-4 mb-4">
             <div class="col-md-3">
                 <div class="metric-card">
-                    <div class="metric-value">{micro_cer:.1f}%</div>
+                    <div class="metric-value" id="metric-micro-cer">{micro_cer:.1f}%</div>
                     <div class="metric-label">Micro-CER</div>
                     <small class="text-muted">Pondéré par caractères</small>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="metric-card">
-                    <div class="metric-value">{macro_cer:.1f}%</div>
+                    <div class="metric-value" id="metric-macro-cer">{macro_cer:.1f}%</div>
                     <div class="metric-label">Macro-CER</div>
                     <small class="text-muted">Moyenne par document</small>
                 </div>
@@ -140,9 +154,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
             <div class="col-md-3">
                 <div class="metric-card">
-                    <div class="metric-value" style="color: {bias_color};">{cer_bias:+.1f}pp</div>
+                    <div class="metric-value" id="metric-bias" style="color: {bias_color};">{cer_bias:+.1f}pp</div>
                     <div class="metric-label">Biais Corpus</div>
-                    <small class="text-muted">{bias_interpretation}</small>
+                    <small class="text-muted" id="metric-bias-text">{bias_interpretation}</small>
                 </div>
             </div>
         </div>
@@ -703,6 +717,106 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             a.download = 'evaluation_data.json';
             a.click();
         }}
+        
+        // Mise à jour dynamique selon la normalisation
+        function updateNormalization(normKey) {{
+            const pageCers = reportData.page_cers_by_norm[normKey] || reportData.page_cers;
+            const docCers = reportData.doc_cers_by_norm[normKey] || reportData.doc_cers;
+            
+            // Calculer micro-CER (moyenne pondérée par caractères)
+            const totalErrors = pageCers.reduce((sum, cer, i) => {{
+                // Approximation: utiliser le CER * total_chars pour reconstruire les erreurs
+                return sum + (cer/100 * reportData.page_lines[i]);
+            }}, 0);
+            const totalChars = reportData.page_lines.reduce((a, b) => a + b, 0);
+            const microCer = pageCers.length > 0 ? pageCers.reduce((a, b) => a + b, 0) / pageCers.length : 0;
+            
+            // Calculer macro-CER (moyenne des CER par document)
+            const macroCer = docCers.length > 0 ? docCers.reduce((a, b) => a + b, 0) / docCers.length : 0;
+            
+            // Biais
+            const bias = microCer - macroCer;
+            const biasColor = Math.abs(bias) <= 1 ? '#10B981' : (Math.abs(bias) <= 3 ? '#F59E0B' : '#EF4444');
+            const biasText = Math.abs(bias) <= 1 ? 'Corpus équilibré' : (Math.abs(bias) <= 3 ? 'Biais modéré' : 'Biais important');
+            
+            // Mettre à jour les métriques du bandeau
+            document.getElementById('metric-micro-cer').textContent = microCer.toFixed(1) + '%';
+            document.getElementById('metric-macro-cer').textContent = macroCer.toFixed(1) + '%';
+            document.getElementById('metric-bias').textContent = (bias >= 0 ? '+' : '') + bias.toFixed(1) + 'pp';
+            document.getElementById('metric-bias').style.color = biasColor;
+            document.getElementById('metric-bias-text').textContent = biasText;
+            
+            // Mettre à jour le graphique de distribution CER
+            const meanCer = pageCers.reduce((a, b) => a + b, 0) / pageCers.length;
+            Plotly.react('cer-distribution', [{{
+                x: pageCers,
+                type: 'histogram',
+                marker: {{ color: '#4F46E5', opacity: 0.7 }},
+                nbinsx: 30
+            }}], {{
+                xaxis: {{ title: 'CER (%)' }},
+                yaxis: {{ title: 'Nombre de pages' }},
+                shapes: [{{
+                    type: 'line', x0: meanCer, x1: meanCer, y0: 0, y1: 1, yref: 'paper',
+                    line: {{ color: '#EF4444', width: 2, dash: 'dash' }}
+                }}],
+                annotations: [{{
+                    x: meanCer, y: 1, yref: 'paper', text: 'Moyenne: ' + meanCer.toFixed(1) + '%',
+                    showarrow: false, yanchor: 'bottom'
+                }}]
+            }}, {{ responsive: true }});
+            
+            // Mettre à jour CER vs Complexité
+            Plotly.react('cer-complexity', [{{
+                x: reportData.page_lines,
+                y: pageCers,
+                mode: 'markers',
+                type: 'scatter',
+                name: 'Pages',
+                marker: {{ color: pageCers, colorscale: 'RdYlGn', reversescale: true, size: 8, opacity: 0.6 }},
+                text: reportData.page_names,
+                hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
+            }}], {{
+                xaxis: {{ title: 'Nombre de lignes' }},
+                yaxis: {{ title: 'CER (%)' }},
+                margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+            }}, {{ responsive: true }});
+            
+            // Mettre à jour CER par document
+            Plotly.react('cer-by-document', [{{
+                y: reportData.doc_names,
+                x: docCers,
+                type: 'bar',
+                orientation: 'h',
+                marker: {{ color: docCers, colorscale: 'RdYlGn', reversescale: true }},
+                hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
+            }}], {{
+                xaxis: {{ title: 'CER (%)' }},
+                margin: {{ l: 180, r: 30, t: 20, b: 40 }},
+                autosize: true
+            }}, {{ responsive: true }});
+            
+            // Mettre à jour CER vs Segmentation
+            Plotly.react('cer-vs-segmentation', [{{
+                x: reportData.doc_seg_errors,
+                y: docCers,
+                mode: 'markers',
+                type: 'scatter',
+                name: 'Documents',
+                marker: {{ 
+                    color: docCers, colorscale: 'RdYlGn', reversescale: true,
+                    size: reportData.doc_sizes, sizemode: 'area',
+                    sizeref: 2.*Math.max(...reportData.doc_sizes)/(40.**2), sizemin: 4
+                }},
+                text: reportData.doc_names,
+                hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
+            }}], {{
+                xaxis: {{ title: 'Taux erreur segmentation (%)' }},
+                yaxis: {{ title: 'CER (%)' }},
+                margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                height: 350, autosize: true
+            }}, {{ responsive: true }});
+        }}
     </script>
 </body>
 </html>
@@ -813,7 +927,36 @@ def generate_html_report(
                 confusions_norm_html += f"<tr><td><code>{conf['gt']}</code></td><td>→</td><td><code>{conf['pred']}</code></td><td>{conf['count']}</td></tr>"
             confusions_norm_html += "</tbody></table>"
     
-    # Données JSON embarquées
+    # Données JSON embarquées avec CER par niveau de normalisation
+    norm_keys = ['base', 'no_accents', 'lowercase', 'normalized_chars', 'no_punctuation', 'historical_abbrev', 'normalized']
+    
+    # CER par page pour chaque normalisation
+    page_cers_by_norm = {'base': page_cers}
+    for norm_key in norm_keys[1:]:  # Skip 'base'
+        cer_key = f'cer_{norm_key}'
+        page_cers_by_norm[norm_key] = [m.get(cer_key, m['cer']) * 100 for m in all_metrics]
+    
+    # Recalculer doc_cers pour chaque normalisation
+    doc_cers_by_norm = {}
+    for norm_key in norm_keys:
+        cer_key = 'cer' if norm_key == 'base' else f'cer_{norm_key}'
+        # Calculer CER moyen par document pour cette normalisation
+        doc_stats_for_norm = {}
+        for m in all_metrics:
+            doc_name = m['name'].rsplit('_', 2)[0] if m['name'].endswith(('_D', '_G')) else m['name'].rsplit('_', 1)[0]
+            if doc_name not in doc_stats_for_norm:
+                doc_stats_for_norm[doc_name] = {'total_edit': 0, 'total_chars': 0}
+            edit_key = 'total_edit_distance' if norm_key == 'base' else f'total_edit_distance_{norm_key}'
+            chars_key = 'total_gt_chars' if norm_key == 'base' else f'total_gt_chars_{norm_key}'
+            doc_stats_for_norm[doc_name]['total_edit'] += m.get(edit_key, m['total_edit_distance'])
+            doc_stats_for_norm[doc_name]['total_chars'] += m.get(chars_key, m['total_gt_chars'])
+        
+        doc_cers_by_norm[norm_key] = [
+            (doc_stats_for_norm[name]['total_edit'] / doc_stats_for_norm[name]['total_chars'] * 100)
+            if doc_stats_for_norm[name]['total_chars'] > 0 else 100.0
+            for name in doc_names
+        ]
+    
     json_data = {
         'summary': {
             'micro_cer': micro_cer,
@@ -825,6 +968,8 @@ def generate_html_report(
             'num_documents': len(document_stats)
         },
         'page_cers': page_cers,
+        'page_cers_by_norm': page_cers_by_norm,
+        'doc_cers_by_norm': doc_cers_by_norm,
         'page_ious': page_ious,
         'page_lines': page_lines,
         'page_names': page_names,
