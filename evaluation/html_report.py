@@ -91,11 +91,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .plotly-graph {{
             width: 100%;
             height: 350px;
-            max-height: 400px;
-            overflow: hidden;
-        }}
-        .card-body {{
-            overflow: hidden;
         }}
         .table-hover tbody tr:hover {{
             background-color: rgba(79, 70, 229, 0.05);
@@ -436,7 +431,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
         }}], {{
             xaxis: {{ title: 'CER (%)' }},
-            margin: {{ l: 200 }}
+            margin: {{ l: 180, r: 30, t: 20, b: 40 }},
+            autosize: true
         }}, {{ responsive: true }});
         
         // IoU par document
@@ -451,7 +447,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }}
         }}], {{
             xaxis: {{ title: 'IoU (%)' }},
-            margin: {{ l: 150, r: 20, t: 20, b: 40 }},
+            margin: {{ l: 180, r: 30, t: 20, b: 40 }},
             height: 450,
             autosize: true
         }}, {{ responsive: true }});
