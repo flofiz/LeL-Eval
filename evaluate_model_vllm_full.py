@@ -115,6 +115,17 @@ async def run_evaluation_async(api_url: str,
         all_metrics.append(metrics)
         if page_analysis:
             all_page_analyses.append(page_analysis)
+        
+        # Ajouter matching_info au fichier LabelMe pred si disponible
+        if output_dir and 'matching_info' in metrics:
+            labelme_dir = os.path.join(output_dir, "labelme")
+            pred_filename = os.path.join(labelme_dir, f"{result['name']}_pred.json")
+            if os.path.exists(pred_filename):
+                with open(pred_filename, 'r', encoding='utf-8') as f:
+                    pred_labelme = json.load(f)
+                pred_labelme['matching_info'] = metrics['matching_info']
+                with open(pred_filename, 'w', encoding='utf-8') as f:
+                    json.dump(pred_labelme, f, indent=2, ensure_ascii=False)
     
     # Agrégation des erreurs
     print("Agrégation des statistiques d'erreurs...")

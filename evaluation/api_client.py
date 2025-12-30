@@ -191,9 +191,6 @@ async def process_sample(session: aiohttp.ClientSession,
                 sample['image'],
                 sample['name']
             )
-            # Ajouter les informations de matching pour débogage
-            if 'matching_info' in metrics:
-                pred_labelme['matching_info'] = metrics['matching_info']
             pred_filename = os.path.join(labelme_dir, f"{sample['name']}_pred.json")
             with open(pred_filename, 'w', encoding='utf-8') as f:
                 json.dump(pred_labelme, f, indent=2, ensure_ascii=False)
