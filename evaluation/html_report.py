@@ -167,7 +167,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <!-- Onglet Vue d'ensemble -->
             <div class="tab-pane fade show active" id="overview">
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-12 col-lg-6">
                         <div class="card">
                             <div class="card-header">Distribution du CER par Page</div>
                             <div class="card-body">
@@ -175,17 +175,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header">CER par Variante de Normalisation</div>
-                            <div class="card-body">
-                                <div id="cer-variants" class="plotly-graph"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-12 col-lg-6">
                         <div class="card">
                             <div class="card-header">Distribution de l'IoU</div>
                             <div class="card-body">
@@ -193,11 +183,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                </div>
+                <div class="row">
+                    <div class="col-12">
                         <div class="card">
                             <div class="card-header">CER vs Complexité (nb lignes)</div>
                             <div class="card-body">
                                 <div id="cer-complexity" class="plotly-graph"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">CER par Variante de Normalisation</div>
+                            <div class="card-body">
+                                <div id="cer-variants" class="plotly-graph"></div>
                             </div>
                         </div>
                     </div>
@@ -217,7 +219,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     </div>
                 </div>
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-12">
                         <div class="card">
                             <div class="card-header">IoU par Document</div>
                             <div class="card-body">
@@ -225,7 +227,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                </div>
+                <div class="row">
+                    <div class="col-12">
                         <div class="card">
                             <div class="card-header">CER vs Erreurs de Segmentation</div>
                             <div class="card-body">
@@ -315,7 +319,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <!-- Onglet Avancé -->
             <div class="tab-pane fade" id="advanced">
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-12">
                         <div class="card">
                             <div class="card-header">Variantes CER - Niveau Page vs Document</div>
                             <div class="card-body">
@@ -323,7 +327,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                </div>
+                <div class="row">
+                    <div class="col-12 col-lg-6 mx-auto">
                         <div class="card">
                             <div class="card-header">Métriques Radar</div>
                             <div class="card-body">
@@ -403,6 +409,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             y: reportData.page_cers,
             mode: 'markers',
             type: 'scatter',
+            name: 'Pages',
             marker: {{ 
                 color: reportData.page_cers, 
                 colorscale: 'RdYlGn', 
@@ -414,8 +421,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
         }}], {{
             xaxis: {{ title: 'Nombre de lignes' }},
-            yaxis: {{ title: 'CER (%)' }}
+            yaxis: {{ title: 'CER (%)' }},
+            margin: {{ l: 60, r: 30, t: 30, b: 50 }}
         }}, {{ responsive: true }});
+        
+        // Ajouter ligne de tendance CER vs Complexité
+        (function() {{
+            const x = reportData.page_lines;
+            const y = reportData.page_cers;
+            const n = x.length;
+            const sumX = x.reduce((a, b) => a + b, 0);
+            const sumY = y.reduce((a, b) => a + b, 0);
+            const sumXY = x.reduce((acc, xi, i) => acc + xi * y[i], 0);
+            const sumX2 = x.reduce((acc, xi) => acc + xi * xi, 0);
+            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+            const xMin = Math.min(...x);
+            const xMax = Math.max(...x);
+            const correlation = (n * sumXY - sumX * sumY) / Math.sqrt((n * sumX2 - sumX * sumX) * (n * y.reduce((a, b) => a + b*b, 0) - sumY * sumY));
+            Plotly.addTraces('cer-complexity', {{
+                x: [xMin, xMax],
+                y: [slope * xMin + intercept, slope * xMax + intercept],
+                mode: 'lines',
+                type: 'scatter',
+                name: 'Tendance (r=' + correlation.toFixed(2) + ')',
+                line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
+            }});
+        }})();
         
         // CER par document (bar chart horizontal)
         Plotly.newPlot('cer-by-document', [{{
@@ -458,6 +490,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             y: reportData.doc_cers,
             mode: 'markers',
             type: 'scatter',
+            name: 'Documents',
             marker: {{ 
                 color: reportData.doc_cers, 
                 colorscale: 'RdYlGn', 
@@ -472,10 +505,39 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }}], {{
             xaxis: {{ title: 'Taux erreur segmentation (%)' }},
             yaxis: {{ title: 'CER (%)' }},
-            margin: {{ l: 60, r: 20, t: 20, b: 50 }},
+            margin: {{ l: 60, r: 30, t: 30, b: 50 }},
             height: 350,
             autosize: true
         }}, {{ responsive: true }});
+        
+        // Ajouter ligne de tendance CER vs Segmentation
+        (function() {{
+            const x = reportData.doc_seg_errors;
+            const y = reportData.doc_cers;
+            const n = x.length;
+            if (n < 2) return;
+            const sumX = x.reduce((a, b) => a + b, 0);
+            const sumY = y.reduce((a, b) => a + b, 0);
+            const sumXY = x.reduce((acc, xi, i) => acc + xi * y[i], 0);
+            const sumX2 = x.reduce((acc, xi) => acc + xi * xi, 0);
+            const denom = n * sumX2 - sumX * sumX;
+            if (Math.abs(denom) < 0.001) return;
+            const slope = (n * sumXY - sumX * sumY) / denom;
+            const intercept = (sumY - slope * sumX) / n;
+            const xMin = Math.min(...x);
+            const xMax = Math.max(...x);
+            const sumY2 = y.reduce((a, b) => a + b*b, 0);
+            const corrDenom = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+            const correlation = corrDenom > 0 ? (n * sumXY - sumX * sumY) / corrDenom : 0;
+            Plotly.addTraces('cer-vs-segmentation', {{
+                x: [xMin, xMax],
+                y: [slope * xMin + intercept, slope * xMax + intercept],
+                mode: 'lines',
+                type: 'scatter',
+                name: 'Tendance (r=' + correlation.toFixed(2) + ')',
+                line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
+            }});
+        }})();
         
         // Types d'erreurs (pie chart)
         if (reportData.error_totals) {{
