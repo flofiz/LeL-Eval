@@ -760,8 +760,8 @@ def generate_html_report(
     doc_sizes = [stats['total_ground_truth'] for _, stats in sorted_docs]
     
     # Variantes CER
-    variant_labels = ['Base', 'Sans accents', 'Minuscules', 'Chars norm.', 'Sans ponct.', 'Normalisé']
-    variant_keys = ['no_accents', 'lowercase', 'normalized_chars', 'no_punctuation', 'normalized']
+    variant_labels = ['Base', 'Sans accents', 'Minuscules', 'Chars norm.', 'Sans ponct.', 'Abbr. hist.', 'Normalisé']
+    variant_keys = ['no_accents', 'lowercase', 'normalized_chars', 'no_punctuation', 'historical_abbrev', 'normalized']
     cer_variant_values = [micro_cer] + [page_cer_variants.get(k, 0) * 100 for k in variant_keys]
     doc_cer_variant_values = [macro_cer] + [doc_cer_variants.get(k, 0) * 100 for k in variant_keys]
     

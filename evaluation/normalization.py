@@ -54,16 +54,36 @@ def normalize_no_punctuation(text: str) -> str:
     return ''.join(c for c in text if unicodedata.category(c)[0] != 'P')
 
 
+def normalize_historical_abbrev(text: str) -> str:
+    """
+    Normalise les abréviations historiques des documents anciens.
+    
+    Règles de normalisation:
+    - # → lt (abréviation courante dans les manuscrits médiévaux)
+    
+    Ces symboles étaient utilisés par les scribes pour abréger des
+    séquences de lettres fréquentes.
+    """
+    abbrev_map = {
+        '#': 'lt',  # # est une abréviation de "lt" dans les documents historiques
+    }
+    for old, new in abbrev_map.items():
+        text = text.replace(old, new)
+    return text
+
+
 def normalize_full(text: str) -> str:
     """
     Applique toutes les normalisations:
-    1. Normalisation des caractères spéciaux
-    2. Conversion en minuscules
-    3. Suppression des accents
-    4. Suppression de la ponctuation
+    1. Normalisation des abréviations historiques
+    2. Normalisation des caractères spéciaux
+    3. Conversion en minuscules
+    4. Suppression des accents
+    5. Suppression de la ponctuation
     
     Retourne le texte "canonique" pour comparaison fondamentale.
     """
+    text = normalize_historical_abbrev(text)  # D'abord les abréviations historiques
     text = normalize_special_chars(text)
     text = normalize_lowercase(text)
     text = normalize_no_accents(text)
@@ -77,5 +97,7 @@ NORMALIZATIONS: Dict[str, Callable[[str], str]] = {
     'lowercase': normalize_lowercase,
     'normalized_chars': normalize_special_chars,
     'no_punctuation': normalize_no_punctuation,
+    'historical_abbrev': normalize_historical_abbrev,
     'normalized': normalize_full,
 }
+

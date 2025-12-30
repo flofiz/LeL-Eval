@@ -22,6 +22,7 @@ from .normalization import (
     normalize_lowercase,
     normalize_special_chars,
     normalize_no_punctuation,
+    normalize_historical_abbrev,
     normalize_full,
     NORMALIZATIONS,
 )
@@ -77,6 +78,7 @@ __all__ = [
     'normalize_lowercase',
     'normalize_special_chars',
     'normalize_no_punctuation',
+    'normalize_historical_abbrev',
     'normalize_full',
     'NORMALIZATIONS',
     # Models
