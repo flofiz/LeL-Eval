@@ -198,7 +198,10 @@ def match_predictions_to_ground_truth(
         }
     
     # 1. Calculer les matrices de coûts et IoU
-    cost_matrix = np.full((n_pred, n_gt), np.inf)  # Inf = impossible
+    # Note: On utilise une grande valeur (1e10) au lieu de inf pour éviter les erreurs "infeasible"
+    # de linear_sum_assignment. On filtrera les matchs invalides après.
+    LARGE_COST = 1e10
+    cost_matrix = np.full((n_pred, n_gt), LARGE_COST)
     iou_matrix = np.zeros((n_pred, n_gt))
     
     for i, pred in enumerate(predictions):
@@ -219,32 +222,18 @@ def match_predictions_to_ground_truth(
                     # Appliquer le seuil de CER
                     if cer_symmetric <= max_cer_threshold:
                         cost_matrix[i, j] = cer_symmetric
-    # 2. Vérifier si la matrice est faisable (au moins un coût fini)
-    if np.all(np.isinf(cost_matrix)):
-        # Aucun match possible (toutes les paires ont IoU=0 ou CER>threshold)
-        matching_info = {
-            'n_predictions': n_pred,
-            'n_ground_truths': n_gt,
-            'n_matched': 0,
-            'cost_matrix': cost_matrix.tolist(),
-            'iou_matrix': iou_matrix.tolist(),
-            'matches': [],
-            'total_cost': 0,
-            'note': 'No feasible matches (all pairs have IoU=0 or CER>threshold)'
-        }
-        return [], matching_info
     
-    # 3. Appliquer l'algorithme hongrois (minimisation du coût total)
+    # 2. Appliquer l'algorithme hongrois (minimisation du coût total)
     # linear_sum_assignment trouve le matching optimal
     row_indices, col_indices = linear_sum_assignment(cost_matrix)
     
-    # 4. Extraire les paires matchées valides (coût != inf)
+    # 3. Extraire les paires matchées valides (coût < LARGE_COST)
     matched_pairs = []
     match_details = []
     
     for pred_idx, gt_idx in zip(row_indices, col_indices):
         cost = cost_matrix[pred_idx, gt_idx]
-        if cost < np.inf:  # Match valide
+        if cost < LARGE_COST:  # Match valide
             matched_pairs.append((predictions[pred_idx], ground_truths[gt_idx]))
             match_details.append({
                 'pred_idx': int(pred_idx),
@@ -255,7 +244,7 @@ def match_predictions_to_ground_truth(
                 'iou': float(iou_matrix[pred_idx, gt_idx])
             })
     
-    # 5. Informations de débogage
+    # 4. Informations de débogage
     matching_info = {
         'n_predictions': n_pred,
         'n_ground_truths': n_gt,
@@ -263,7 +252,7 @@ def match_predictions_to_ground_truth(
         'cost_matrix': cost_matrix.tolist(),
         'iou_matrix': iou_matrix.tolist(),
         'matches': match_details,
-        'total_cost': sum(cost_matrix[i, j] for i, j in zip(row_indices, col_indices) if cost_matrix[i, j] < np.inf)
+        'total_cost': sum(cost_matrix[i, j] for i, j in zip(row_indices, col_indices) if cost_matrix[i, j] < LARGE_COST)
     }
     
     return matched_pairs, matching_info
