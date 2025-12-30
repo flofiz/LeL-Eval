@@ -937,13 +937,16 @@ def generate_html_report(
         page_cers_by_norm[norm_key] = [m.get(cer_key, m['cer']) * 100 for m in all_metrics]
     
     # Recalculer doc_cers pour chaque normalisation
+    # Importer la fonction get_document_name pour cohérence
+    from .metrics import get_document_name
+    
     doc_cers_by_norm = {}
     for norm_key in norm_keys:
         cer_key = 'cer' if norm_key == 'base' else f'cer_{norm_key}'
         # Calculer CER moyen par document pour cette normalisation
         doc_stats_for_norm = {}
         for m in all_metrics:
-            doc_name = m['name'].rsplit('_', 2)[0] if m['name'].endswith(('_D', '_G')) else m['name'].rsplit('_', 1)[0]
+            doc_name = get_document_name(m['name'])  # Utiliser la même fonction que metrics.py
             if doc_name not in doc_stats_for_norm:
                 doc_stats_for_norm[doc_name] = {'total_edit': 0, 'total_chars': 0}
             edit_key = 'total_edit_distance' if norm_key == 'base' else f'total_edit_distance_{norm_key}'
@@ -953,7 +956,7 @@ def generate_html_report(
         
         doc_cers_by_norm[norm_key] = [
             (doc_stats_for_norm[name]['total_edit'] / doc_stats_for_norm[name]['total_chars'] * 100)
-            if doc_stats_for_norm[name]['total_chars'] > 0 else 100.0
+            if name in doc_stats_for_norm and doc_stats_for_norm[name]['total_chars'] > 0 else 100.0
             for name in doc_names
         ]
     
