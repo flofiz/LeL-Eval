@@ -90,7 +90,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .badge-danger {{ background-color: var(--danger-color); }}
         .plotly-graph {{
             width: 100%;
-            height: 400px;
+            height: 350px;
+            max-height: 400px;
+            overflow: hidden;
+        }}
+        .card-body {{
+            overflow: hidden;
         }}
         .table-hover tbody tr:hover {{
             background-color: rgba(79, 70, 229, 0.05);
@@ -446,7 +451,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }}
         }}], {{
             xaxis: {{ title: 'IoU (%)' }},
-            margin: {{ l: 200 }}
+            margin: {{ l: 150, r: 20, t: 20, b: 40 }},
+            height: 450,
+            autosize: true
         }}, {{ responsive: true }});
         
         // CER vs Segmentation
@@ -468,7 +475,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
         }}], {{
             xaxis: {{ title: 'Taux erreur segmentation (%)' }},
-            yaxis: {{ title: 'CER (%)' }}
+            yaxis: {{ title: 'CER (%)' }},
+            margin: {{ l: 60, r: 20, t: 20, b: 50 }},
+            height: 350,
+            autosize: true
         }}, {{ responsive: true }});
         
         // Types d'erreurs (pie chart)
@@ -478,8 +488,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 labels: ['Insertions', 'Suppressions', 'Substitutions'],
                 type: 'pie',
                 marker: {{ colors: ['#4F46E5', '#EF4444', '#F59E0B'] }},
-                hole: 0.4
-            }}], {{}}, {{ responsive: true }});
+                hole: 0.4,
+                textposition: 'inside'
+            }}], {{
+                margin: {{ l: 20, r: 20, t: 20, b: 20 }},
+                height: 350,
+                autosize: true,
+                showlegend: true,
+                legend: {{ orientation: 'h', y: -0.1 }}
+            }}, {{ responsive: true }});
         }}
         
         // Radar chart
@@ -490,7 +507,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             fill: 'toself',
             marker: {{ color: '#4F46E5' }}
         }}], {{
-            polar: {{ radialaxis: {{ visible: true, range: [0, 100] }} }}
+            polar: {{ radialaxis: {{ visible: true, range: [0, 100] }} }},
+            margin: {{ l: 60, r: 60, t: 40, b: 40 }},
+            height: 350,
+            autosize: true
         }}, {{ responsive: true }});
         
         // Comparaison variantes Page vs Document
@@ -506,7 +526,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             type: 'bar'
         }}], {{
             barmode: 'group',
-            yaxis: {{ title: 'CER (%)' }}
+            yaxis: {{ title: 'CER (%)' }},
+            margin: {{ l: 50, r: 20, t: 20, b: 80 }},
+            height: 350,
+            autosize: true,
+            legend: {{ orientation: 'h', y: -0.2 }}
         }}, {{ responsive: true }});
         
         // Filtrage tableau
