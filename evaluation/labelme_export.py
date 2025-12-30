@@ -48,21 +48,38 @@ def tsv_to_labelme(tsv_content: str, image_base64: str, image_name: str) -> Dict
     
     # Parser les bounding boxes
     shapes = []
+    parsing_errors = []
+    has_parsing_error = False
+    
     try:
         lines = [l for l in tsv_content.strip().split('\n') if l.strip()]
-        for line in lines:
-            bbox = parse_tsv_line(line)
-            # Convertir en 4 points
-            points = bbox_to_4points(bbox)
-            
-            shape = {
-                "label": bbox.text,
-                "points": points,
-                "shape_type": "polygon",
-                "flags": {}
-            }
-            shapes.append(shape)
+        for i, line in enumerate(lines):
+            try:
+                bbox = parse_tsv_line(line)
+                # Convertir en 4 points
+                points = bbox_to_4points(bbox)
+                
+                shape = {
+                    "label": bbox.text,
+                    "points": points,
+                    "shape_type": "polygon",
+                    "flags": {}
+                }
+                shapes.append(shape)
+            except Exception as line_error:
+                has_parsing_error = True
+                parsing_errors.append({
+                    "line_number": i + 1,
+                    "line_content": line,
+                    "error": str(line_error)
+                })
     except Exception as e:
+        has_parsing_error = True
+        parsing_errors.append({
+            "line_number": 0,
+            "line_content": "N/A",
+            "error": f"Erreur globale: {str(e)}"
+        })
         print(f"Erreur lors de la conversion LabelMe pour {image_name}: {e}")
     
     # Format LabelMe
@@ -76,4 +93,11 @@ def tsv_to_labelme(tsv_content: str, image_base64: str, image_name: str) -> Dict
         "imageWidth": width
     }
     
+    # Ajouter la sortie brute en cas d'erreur de parsing pour debug
+    if has_parsing_error:
+        labelme_data["raw_tsv"] = tsv_content
+        labelme_data["parsing_errors"] = parsing_errors
+        labelme_data["flags"]["parsing_error"] = True
+    
     return labelme_data
+
