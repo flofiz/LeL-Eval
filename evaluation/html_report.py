@@ -462,7 +462,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
         }}], {{
             xaxis: {{ title: 'Nombre de lignes' }},
-            yaxis: {{ title: 'CER (%)' }},
+            yaxis: {{ title: 'CER (%)', type: 'log' }},
             margin: {{ l: 60, r: 30, t: 30, b: 50 }}
         }}, {{ responsive: true }});
         
@@ -514,7 +514,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.1f}}<br>CER: %{{y:.2f}}%<extra></extra>'
             }}], {{
                 xaxis: {{ title: 'Perplexité (+ bas = + confiant)' }},
-                yaxis: {{ title: 'CER (%)' }},
+                yaxis: {{ title: 'CER (%)', type: 'log' }},
                 margin: {{ l: 60, r: 30, t: 30, b: 50 }}
             }}, {{ responsive: true }});
             
@@ -563,7 +563,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }},
             hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
         }}], {{
-            xaxis: {{ title: 'CER (%)' }},
+            xaxis: {{ title: 'CER (%)', type: 'log' }},
             margin: {{ l: 180, r: 30, t: 20, b: 40 }},
             autosize: true
         }}, {{ responsive: true }});
@@ -605,7 +605,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
         }}], {{
             xaxis: {{ title: 'Taux erreur segmentation (%)' }},
-            yaxis: {{ title: 'CER (%)' }},
+            yaxis: {{ title: 'CER (%)', type: 'log' }},
             margin: {{ l: 60, r: 30, t: 30, b: 50 }},
             height: 350,
             autosize: true
@@ -854,9 +854,39 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
             }}], {{
                 xaxis: {{ title: 'Nombre de lignes' }},
-                yaxis: {{ title: 'CER (%)' }},
+                yaxis: {{ title: 'CER (%)', type: 'log' }},
                 margin: {{ l: 60, r: 30, t: 30, b: 50 }}
             }}, {{ responsive: true }});
+            
+            // CER vs Perplexité
+            const pagePerps = filteredIndices.map(i => reportData.page_perplexities[i]);
+            const validPerp = [];
+            const validCersPerp = [];
+            const validNamesPerp = [];
+            for (let i = 0; i < pagePerps.length; i++) {{
+                if (pagePerps[i] !== null && pagePerps[i] !== undefined) {{
+                    validPerp.push(pagePerps[i]);
+                    validCersPerp.push(pageCers[i]);
+                    validNamesPerp.push(pageNames[i]);
+                }}
+            }}
+            
+            if (validPerp.length > 0) {{
+                Plotly.react('cer-perplexity', [{{
+                    x: validPerp,
+                    y: validCersPerp,
+                    mode: 'markers',
+                    type: 'scatter',
+                    name: 'Pages',
+                    marker: {{ color: validCersPerp, colorscale: 'RdYlGn', reversescale: true, size: 8, opacity: 0.6 }},
+                    text: validNamesPerp,
+                    hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.2f}}<br>CER: %{{y:.2f}}%<extra></extra>'
+                }}], {{
+                    xaxis: {{ title: 'Perplexité' }},
+                    yaxis: {{ title: 'CER (%)', type: 'log' }},
+                    margin: {{ l: 60, r: 30, t: 30, b: 50 }}
+                }}, {{ responsive: true }});
+            }}
             
             // CER par document (ne pas filtrer ici si on veut comparer les docs, ou filtrer si on est en focus doc)
             // Si docFilter != 'all', on pourrait montrer un graphique différent, mais gardons la cohérence.
@@ -869,7 +899,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 marker: {{ color: docCers, colorscale: 'RdYlGn', reversescale: true }},
                 hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
             }}], {{
-                xaxis: {{ title: 'CER (%)' }},
+                xaxis: {{ title: 'CER (%)', type: 'log' }},
                 margin: {{ l: 180, r: 30, t: 20, b: 40 }},
                 autosize: true
             }}, {{ responsive: true }});
@@ -890,7 +920,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
             }}], {{
                 xaxis: {{ title: 'Taux erreur segmentation (%)' }},
-                yaxis: {{ title: 'CER (%)' }},
+                yaxis: {{ title: 'CER (%)', type: 'log' }},
                 margin: {{ l: 60, r: 30, t: 30, b: 50 }},
                 height: 350, autosize: true
             }}, {{ responsive: true }});
