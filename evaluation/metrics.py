@@ -279,20 +279,32 @@ def evaluate_sample(predicted_tsv: str, ground_truth_tsv: str, page_name: str = 
         Tuple (metrics_dict, page_error_analysis)
     """
     
-    # Parse les TSV
-    try:
-        pred_bboxes = [parse_tsv_line(line) for line in predicted_tsv.strip().split('\n') 
-                      if line.strip()]
-    except Exception as e:
-        print(f"Erreur lors du parsing de la prédiction: {e}")
-        pred_bboxes = []
+    # Parse les TSV - ligne par ligne pour ne pas perdre tout si une ligne échoue
+    pred_bboxes = []
+    pred_parsing_errors = []
+    for i, line in enumerate(predicted_tsv.strip().split('\n')):
+        if line.strip():
+            try:
+                pred_bboxes.append(parse_tsv_line(line))
+            except Exception as e:
+                pred_parsing_errors.append({
+                    'line_number': i + 1,
+                    'line_content': line[:100],  # Tronquer pour les logs
+                    'error': str(e)
+                })
     
-    try:
-        gt_bboxes = [parse_tsv_line(line) for line in ground_truth_tsv.strip().split('\n') 
-                    if line.strip()]
-    except Exception as e:
-        print(f"Erreur lors du parsing de la vérité terrain: {e}")
-        gt_bboxes = []
+    gt_bboxes = []
+    gt_parsing_errors = []
+    for i, line in enumerate(ground_truth_tsv.strip().split('\n')):
+        if line.strip():
+            try:
+                gt_bboxes.append(parse_tsv_line(line))
+            except Exception as e:
+                gt_parsing_errors.append({
+                    'line_number': i + 1,
+                    'line_content': line[:100],
+                    'error': str(e)
+                })
     
     # Appariement des prédictions aux vérités terrain
     matched_pairs, matching_info = match_predictions_to_ground_truth(pred_bboxes, gt_bboxes)
@@ -432,6 +444,8 @@ def evaluate_sample(predicted_tsv: str, ground_truth_tsv: str, page_name: str = 
         'num_predicted': len(pred_bboxes),
         'num_ground_truth': num_gt,
         'matching_info': matching_info,  # Logs de débogage pour LabelMe JSON
+        'pred_parsing_errors': pred_parsing_errors,  # Erreurs de parsing prédictions
+        'gt_parsing_errors': gt_parsing_errors,  # Erreurs de parsing GT
     }
     
     # Ajouter les métriques pour chaque variante CER
