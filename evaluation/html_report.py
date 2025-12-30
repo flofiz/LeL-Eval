@@ -373,7 +373,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         <div class="card">
                             <div class="card-header">CER par Document et Normalisation</div>
                             <div class="card-body">
-                                <div id="cer-doc-norm-comparison" style="width:100%; height:600px;"></div>
+                                <div id="cer-doc-norm-comparison" style="width:100%; height:800px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>CER par Document (normalisation sélectionnée)</span>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="toggleScale('cer-doc-selected-norm')">📊 Échelle Log/Lin</button>
+                            </div>
+                            <div class="card-body">
+                                <div id="cer-doc-selected-norm" class="plotly-graph"></div>
                             </div>
                         </div>
                     </div>
@@ -741,7 +754,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             yaxis: {{ automargin: true }},
             margin: {{ l: 180, r: 30, t: 30, b: 50 }},
             legend: {{ orientation: 'h', y: 1.1 }},
-            height: Math.max(400, reportData.doc_names.length * 40)
+            height: Math.max(600, reportData.doc_names.length * 40)
+        }}, {{ responsive: true }});
+        
+        // CER par Document (normalisation sélectionnée) - initial render avec base
+        Plotly.newPlot('cer-doc-selected-norm', [{{
+            y: reportData.doc_names,
+            x: reportData.doc_cers,
+            type: 'bar',
+            orientation: 'h',
+            marker: {{ 
+                color: reportData.doc_cers,
+                colorscale: 'RdYlGn'
+            }},
+            hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
+        }}], {{
+            xaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
+            margin: {{ l: 180, r: 30, t: 20, b: 40 }},
+            height: Math.max(400, reportData.doc_names.length * 25),
+            autosize: true
         }}, {{ responsive: true }});
         
         // Radar chart
@@ -1017,6 +1048,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 yaxis: {{ title: 'CER (%)', type: scaleStates['cer-vs-segmentation'] === false ? 'linear' : 'log', range: scaleStates['cer-vs-segmentation'] === false ? [0, 100] : [0, 2] }},
                 margin: {{ l: 60, r: 30, t: 30, b: 50 }},
                 height: 350, autosize: true
+            }}, {{ responsive: true }});
+            
+            // CER par Document (normalisation sélectionnée)
+            Plotly.react('cer-doc-selected-norm', [{{
+                y: reportData.doc_names,
+                x: docCers,
+                type: 'bar',
+                orientation: 'h',
+                marker: {{ color: docCers, colorscale: 'RdYlGn' }},
+                hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
+            }}], {{
+                xaxis: {{ title: 'CER (%)', type: scaleStates['cer-doc-selected-norm'] === false ? 'linear' : 'log', range: scaleStates['cer-doc-selected-norm'] === false ? [0, 100] : [0, 2] }},
+                margin: {{ l: 180, r: 30, t: 20, b: 40 }},
+                height: Math.max(400, reportData.doc_names.length * 25),
+                autosize: true
             }}, {{ responsive: true }});
         }}
     </script>
