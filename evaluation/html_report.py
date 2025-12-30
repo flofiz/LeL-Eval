@@ -345,6 +345,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div class="row">
                     <div class="col-12">
                         <div class="card">
+                            <div class="card-header">CER par Document et Normalisation</div>
+                            <div class="card-body">
+                                <div id="cer-doc-norm-comparison" style="width:100%; height:600px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
                             <div class="card-header">Variantes CER - Niveau Page vs Document</div>
                             <div class="card-body">
                                 <div id="cer-variants-comparison" class="plotly-graph"></div>
@@ -620,8 +630,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 type: 'scatter',
                 name: 'Tendance (r=' + correlation.toFixed(2) + ')',
                 line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
-            }});
-        }})();
+            }}, {{ responsive: true }});
+        }}
         
         // Types d'erreurs (pie chart)
         if (reportData.error_totals) {{
@@ -640,6 +650,48 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 legend: {{ orientation: 'h', y: -0.1 }}
             }}, {{ responsive: true }});
         }}
+        
+        // CER par Document et Normalisation (grouped bar chart)
+        const normColors = {{
+            'base': '#3B82F6',           // Bleu
+            'no_accents': '#10B981',     // Vert
+            'lowercase': '#8B5CF6',       // Violet
+            'normalized_chars': '#F59E0B', // Orange
+            'no_punctuation': '#EF4444',   // Rouge
+            'historical_abbrev': '#EC4899', // Rose
+            'normalized': '#6B7280'        // Gris
+        }};
+        const normLabels = {{
+            'base': 'Base',
+            'no_accents': 'Sans accents',
+            'lowercase': 'Minuscules',
+            'normalized_chars': 'Chars norm.',
+            'no_punctuation': 'Sans ponct.',
+            'historical_abbrev': 'Abbr. hist.',
+            'normalized': 'Normalisé'
+        }};
+        
+        const docNormTraces = [];
+        for (const [normKey, cers] of Object.entries(reportData.doc_cers_by_norm)) {{
+            docNormTraces.push({{
+                y: reportData.doc_names,
+                x: cers,
+                type: 'bar',
+                orientation: 'h',
+                name: normLabels[normKey] || normKey,
+                marker: {{ color: normColors[normKey] || '#999' }},
+                hovertemplate: '<b>%{{y}}</b><br>' + (normLabels[normKey] || normKey) + ': %{{x:.2f}}%<extra></extra>'
+            }});
+        }}
+        
+        Plotly.newPlot('cer-doc-norm-comparison', docNormTraces, {{
+            barmode: 'group',
+            xaxis: {{ title: 'CER (%)' }},
+            yaxis: {{ automargin: true }},
+            margin: {{ l: 180, r: 30, t: 30, b: 50 }},
+            legend: {{ orientation: 'h', y: 1.1 }},
+            height: Math.max(400, reportData.doc_names.length * 40)
+        }}, {{ responsive: true }});
         
         // Radar chart
         Plotly.newPlot('radar-chart', [{{
