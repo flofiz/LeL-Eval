@@ -219,12 +219,26 @@ def match_predictions_to_ground_truth(
                     # Appliquer le seuil de CER
                     if cer_symmetric <= max_cer_threshold:
                         cost_matrix[i, j] = cer_symmetric
+    # 2. Vérifier si la matrice est faisable (au moins un coût fini)
+    if np.all(np.isinf(cost_matrix)):
+        # Aucun match possible (toutes les paires ont IoU=0 ou CER>threshold)
+        matching_info = {
+            'n_predictions': n_pred,
+            'n_ground_truths': n_gt,
+            'n_matched': 0,
+            'cost_matrix': cost_matrix.tolist(),
+            'iou_matrix': iou_matrix.tolist(),
+            'matches': [],
+            'total_cost': 0,
+            'note': 'No feasible matches (all pairs have IoU=0 or CER>threshold)'
+        }
+        return [], matching_info
     
-    # 2. Appliquer l'algorithme hongrois (minimisation du coût total)
+    # 3. Appliquer l'algorithme hongrois (minimisation du coût total)
     # linear_sum_assignment trouve le matching optimal
     row_indices, col_indices = linear_sum_assignment(cost_matrix)
     
-    # 3. Extraire les paires matchées valides (coût != inf)
+    # 4. Extraire les paires matchées valides (coût != inf)
     matched_pairs = []
     match_details = []
     
@@ -241,7 +255,7 @@ def match_predictions_to_ground_truth(
                 'iou': float(iou_matrix[pred_idx, gt_idx])
             })
     
-    # 4. Informations de débogage
+    # 5. Informations de débogage
     matching_info = {
         'n_predictions': n_pred,
         'n_ground_truths': n_gt,
