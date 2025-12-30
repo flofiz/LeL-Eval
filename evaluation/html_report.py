@@ -208,7 +208,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div class="row">
                     <div class="col-12">
                         <div class="card">
-                            <div class="card-header">CER vs Complexité (nb lignes)</div>
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>CER vs Complexité (Nombre de lignes)</span>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="toggleScale('cer-complexity')">📊 Échelle Log/Lin</button>
+                            </div>
                             <div class="card-body">
                                 <div id="cer-complexity" class="plotly-graph"></div>
                             </div>
@@ -218,7 +221,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div class="row">
                     <div class="col-12">
                         <div class="card">
-                            <div class="card-header">CER vs Perplexité (confiance du modèle)</div>
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>CER vs Perplexité</span>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="toggleScale('cer-perplexity')">📊 Échelle Log/Lin</button>
+                            </div>
                             <div class="card-body">
                                 <div id="cer-perplexity" class="plotly-graph"></div>
                             </div>
@@ -453,16 +459,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             name: 'Pages',
             marker: {{ 
                 color: reportData.page_cers, 
-                colorscale: 'RdYlGn', 
-                reversescale: true,
+                colorscale: 'RdYlGn_r',
                 size: 8,
                 opacity: 0.6
             }},
             text: reportData.page_names,
             hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
         }}], {{
-            xaxis: {{ title: 'Nombre de lignes' }},
-            yaxis: {{ title: 'CER (%)', type: 'log' }},
+            xaxis: {{ title: 'Nombre de lignes', range: [0, Math.max(...reportData.page_lines) * 1.1] }},
+            yaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
             margin: {{ l: 60, r: 30, t: 30, b: 50 }}
         }}, {{ responsive: true }});
         
@@ -505,16 +510,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 name: 'Pages',
                 marker: {{ 
                     color: validCers, 
-                    colorscale: 'RdYlGn', 
-                    reversescale: true,
+                    colorscale: 'RdYlGn_r',
                     size: 8,
                     opacity: 0.6
                 }},
                 text: validNames,
                 hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.1f}}<br>CER: %{{y:.2f}}%<extra></extra>'
             }}], {{
-                xaxis: {{ title: 'Perplexité (+ bas = + confiant)' }},
-                yaxis: {{ title: 'CER (%)', type: 'log' }},
+                xaxis: {{ title: 'Perplexité (+ bas = + confiant)', range: [0, Math.max(...validPerp) * 1.1] }},
+                yaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
                 margin: {{ l: 60, r: 30, t: 30, b: 50 }}
             }}, {{ responsive: true }});
             
@@ -558,12 +562,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             orientation: 'h',
             marker: {{ 
                 color: reportData.doc_cers,
-                colorscale: 'RdYlGn',
-                reversescale: true
+                colorscale: 'RdYlGn_r'
             }},
             hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
         }}], {{
-            xaxis: {{ title: 'CER (%)', type: 'log' }},
+            xaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
             margin: {{ l: 180, r: 30, t: 20, b: 40 }},
             autosize: true
         }}, {{ responsive: true }});
@@ -576,10 +579,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             orientation: 'h',
             marker: {{ 
                 color: reportData.doc_ious,
-                colorscale: 'RdYlGn'
+                colorscale: 'RdYlGn_r'
             }}
         }}], {{
-            xaxis: {{ title: 'IoU (%)' }},
+            xaxis: {{ title: 'IoU (%)', range: [0, 100] }},
             margin: {{ l: 180, r: 30, t: 20, b: 40 }},
             height: 450,
             autosize: true
@@ -594,8 +597,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             name: 'Documents',
             marker: {{ 
                 color: reportData.doc_cers, 
-                colorscale: 'RdYlGn', 
-                reversescale: true,
+                colorscale: 'RdYlGn_r',
                 size: reportData.doc_sizes,
                 sizemode: 'area',
                 sizeref: 2.*Math.max(...reportData.doc_sizes)/(40.**2),
@@ -604,8 +606,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             text: reportData.doc_names,
             hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
         }}], {{
-            xaxis: {{ title: 'Taux erreur segmentation (%)' }},
-            yaxis: {{ title: 'CER (%)', type: 'log' }},
+            xaxis: {{ title: 'Taux erreur segmentation (%)', range: [0, 100] }},
+            yaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
             margin: {{ l: 60, r: 30, t: 30, b: 50 }},
             height: 350,
             autosize: true
@@ -767,6 +769,35 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }}
         }}
         
+        // Toggle échelle logarithmique/linéaire
+        const scaleStates = {{}}; // Tracker l'état de chaque graphique (true = log, false = lin)
+        function toggleScale(graphId) {{
+            // Initialiser l'état si première utilisation
+            if (scaleStates[graphId] === undefined) {{
+                scaleStates[graphId] = true; // Par défaut on est en log
+            }}
+            
+            // Basculer l'état
+            scaleStates[graphId] = !scaleStates[graphId];
+            const isLog = scaleStates[graphId];
+            
+            // Déterminer l'axe à modifier selon le graphique
+            let update = {{}};
+            if (graphId === 'cer-by-document') {{
+                update = {{
+                    'xaxis.type': isLog ? 'log' : 'linear',
+                    'xaxis.range': isLog ? [0, 2] : [0, 100]
+                }};
+            }} else {{
+                update = {{
+                    'yaxis.type': isLog ? 'log' : 'linear',
+                    'yaxis.range': isLog ? [0, 2] : [0, 100]
+                }};
+            }}
+            
+            Plotly.relayout(graphId, update);
+        }}
+        
         // Download JSON
         function downloadJSON() {{
             const blob = new Blob([JSON.stringify(reportData, null, 2)], {{ type: 'application/json' }});
@@ -849,12 +880,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 mode: 'markers',
                 type: 'scatter',
                 name: 'Pages',
-                marker: {{ color: pageCers, colorscale: 'RdYlGn', reversescale: true, size: 8, opacity: 0.6 }},
+                marker: {{ color: pageCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
                 text: pageNames,
                 hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
             }}], {{
                 xaxis: {{ title: 'Nombre de lignes' }},
-                yaxis: {{ title: 'CER (%)', type: 'log' }},
+                yaxis: {{ title: 'CER (%)', type: scaleStates['cer-complexity'] === false ? 'linear' : 'log', range: scaleStates['cer-complexity'] === false ? [0, 100] : [0, 2] }},
                 margin: {{ l: 60, r: 30, t: 30, b: 50 }}
             }}, {{ responsive: true }});
             
@@ -878,12 +909,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     mode: 'markers',
                     type: 'scatter',
                     name: 'Pages',
-                    marker: {{ color: validCersPerp, colorscale: 'RdYlGn', reversescale: true, size: 8, opacity: 0.6 }},
+                    marker: {{ color: validCersPerp, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
                     text: validNamesPerp,
                     hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.2f}}<br>CER: %{{y:.2f}}%<extra></extra>'
                 }}], {{
                     xaxis: {{ title: 'Perplexité' }},
-                    yaxis: {{ title: 'CER (%)', type: 'log' }},
+                    yaxis: {{ title: 'CER (%)', type: scaleStates['cer-perplexity'] === false ? 'linear' : 'log', range: scaleStates['cer-perplexity'] === false ? [0, 100] : [0, 2] }},
                     margin: {{ l: 60, r: 30, t: 30, b: 50 }}
                 }}, {{ responsive: true }});
             }}
@@ -896,10 +927,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 x: docCers,
                 type: 'bar',
                 orientation: 'h',
-                marker: {{ color: docCers, colorscale: 'RdYlGn', reversescale: true }},
+                marker: {{ color: docCers, colorscale: 'RdYlGn' }},
                 hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
             }}], {{
-                xaxis: {{ title: 'CER (%)', type: 'log' }},
+                xaxis: {{ title: 'CER (%)', type: scaleStates['cer-by-document'] === false ? 'linear' : 'log', range: scaleStates['cer-by-document'] === false ? [0, 100] : [0, 2] }},
                 margin: {{ l: 180, r: 30, t: 20, b: 40 }},
                 autosize: true
             }}, {{ responsive: true }});
@@ -912,7 +943,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 type: 'scatter',
                 name: 'Documents',
                 marker: {{ 
-                    color: docCers, colorscale: 'RdYlGn', reversescale: true,
+                    color: docCers, colorscale: 'RdYlGn',
                     size: reportData.doc_sizes, sizemode: 'area',
                     sizeref: 2.*Math.max(...reportData.doc_sizes)/(40.**2), sizemin: 4
                 }},
@@ -920,7 +951,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
             }}], {{
                 xaxis: {{ title: 'Taux erreur segmentation (%)' }},
-                yaxis: {{ title: 'CER (%)', type: 'log' }},
+                yaxis: {{ title: 'CER (%)', type: scaleStates['cer-vs-segmentation'] === false ? 'linear' : 'log', range: scaleStates['cer-vs-segmentation'] === false ? [0, 100] : [0, 2] }},
                 margin: {{ l: 60, r: 30, t: 30, b: 50 }},
                 height: 350, autosize: true
             }}, {{ responsive: true }});
