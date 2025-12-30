@@ -630,8 +630,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 type: 'scatter',
                 name: 'Tendance (r=' + correlation.toFixed(2) + ')',
                 line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
-            }}, {{ responsive: true }});
-        }}
+            }});
+        }})();
         
         // Types d'erreurs (pie chart)
         if (reportData.error_totals) {{
