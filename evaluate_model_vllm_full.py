@@ -246,6 +246,7 @@ async def run_evaluation_async(api_url: str,
         error_stats=error_stats,
         page_cer_variants=page_cer_variants,
         doc_cer_variants=doc_cer_variants,
+        training_pages_per_doc=training_pages_per_doc,
         output_dir=report_output_dir,
         report_name="evaluation_report"
     )
