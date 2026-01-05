@@ -239,6 +239,19 @@ async def run_evaluation_async(api_url: str,
         report_name="evaluation_report"
     )
     
+    # Debug information
+    try:
+        perp_count = sum(1 for m in all_metrics if m.get('perplexity') is not None)
+        train_docs_count = len(training_pages_per_doc) if training_pages_per_doc else 0
+        print(f"DEBUG: Samples with perplexity: {perp_count}/{len(all_metrics)}")
+        print(f"DEBUG: Documents with training pages: {train_docs_count}")
+        if perp_count == 0:
+            print("WARNING: No perplexity data found. Check if model returns logprobs.")
+        if train_docs_count == 0:
+            print("WARNING: No training pages found. Check data_loader.")
+    except Exception as e:
+        print(f"DEBUG Error: {e}")
+
     # Générer le rapport HTML interactif
     html_report_path = generate_html_report(
         all_metrics=all_metrics,
