@@ -122,7 +122,8 @@ async def call_vllm_api(session: aiohttp.ClientSession,
                         if log_probs:
                             avg_log_prob = sum(log_probs) / len(log_probs)
                             perplexity = math.exp(-avg_log_prob)
-                            logprobs_data = log_probs
+                            # Return full logprobs content for detailed analysis
+                            logprobs_data = logprobs_content
                 
                 return {
                     'content': content,
@@ -189,7 +190,9 @@ async def process_sample(session: aiohttp.ClientSession,
             pred_labelme = tsv_to_labelme(
                 predicted_tsv,
                 sample['image'],
-                sample['name']
+                sample['name'],
+                logprobs=api_response.get('logprobs'),
+                full_response_text=response_text
             )
             pred_filename = os.path.join(labelme_dir, f"{sample['name']}_pred.json")
             with open(pred_filename, 'w', encoding='utf-8') as f:

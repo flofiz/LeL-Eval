@@ -6,9 +6,8 @@ au format LabelMe, permettant la visualisation des bounding boxes.
 """
 
 import base64
-import json
-from io import BytesIO
-from typing import Dict, Tuple
+import math
+from typing import Dict, Tuple, List, Optional
 
 from PIL import Image
 
@@ -31,7 +30,11 @@ def get_image_dimensions(base64_image: str) -> Tuple[int, int]:
     return image.width, image.height
 
 
-def tsv_to_labelme(tsv_content: str, image_base64: str, image_name: str) -> Dict:
+def tsv_to_labelme(tsv_content: str, 
+                   image_base64: str, 
+                   image_name: str,
+                   logprobs: Optional[List[Dict]] = None,
+                   full_response_text: Optional[str] = None) -> Dict:
     """
     Convertit un TSV au format LabelMe pour visualisation.
     
@@ -39,6 +42,8 @@ def tsv_to_labelme(tsv_content: str, image_base64: str, image_name: str) -> Dict
         tsv_content: Contenu TSV avec les bounding boxes
         image_base64: Image encodée en base64
         image_name: Nom de l'image
+        logprobs: Liste des logprobs pour chaque token (optionnel)
+        full_response_text: Texte complet de la réponse pour alignement (optionnel)
     
     Returns:
         Dictionnaire au format LabelMe
@@ -51,8 +56,36 @@ def tsv_to_labelme(tsv_content: str, image_base64: str, image_name: str) -> Dict
     parsing_errors = []
     has_parsing_error = False
     
+    # Préparer le mapping tokens -> char positions si logprobs disponibles
+    token_char_map = []
+    response_cursor = 0
+    
+    if logprobs and full_response_text:
+        # Reconstruire le texte depuis les tokens pour vérification
+        # VLLM retourne parfois des tokens qui ne correspondent pas exactement 1:1 au texte (decoding quirks)
+        # Mais on va supposer que l'ordre est bon.
+        
+        current_pos = 0
+        for token_data in logprobs:
+            token_text = token_data.get('token', '')
+            logprob = token_data.get('logprob')
+            perplexity = math.exp(-logprob) if logprob is not None else None
+            
+            length = len(token_text)
+            token_char_map.append({
+                'token': token_text,
+                'perplexity': perplexity,
+                'start': current_pos,
+                'end': current_pos + length
+            })
+            current_pos += length
+
     try:
         lines = [l for l in tsv_content.strip().split('\n') if l.strip()]
+        
+        # Cursor pour chercher dans le full_response
+        full_text_search_cursor = 0
+        
         for i, line in enumerate(lines):
             try:
                 bbox = parse_tsv_line(line)
@@ -63,8 +96,43 @@ def tsv_to_labelme(tsv_content: str, image_base64: str, image_name: str) -> Dict
                     "label": bbox.text,
                     "points": points,
                     "shape_type": "polygon",
-                    "flags": {}
+                    "flags": {},
+                    "group_id": None,
+                    "description": "" # Standard labelme field
                 }
+                
+                # Ajouter les infos de perplexité si disponibles
+                if logprobs and full_response_text:
+                    # Trouver la ligne dans le texte complet
+                    # On cherche à partir de la position précédente
+                    line_start = full_response_text.find(line, full_text_search_cursor)
+                    
+                    if line_start != -1:
+                        line_end = line_start + len(line)
+                        full_text_search_cursor = line_end # update cursor
+                        
+                        # Trouver les tokens qui intersectent cette plage
+                        line_tokens = []
+                        for t_map in token_char_map:
+                            # Intersection
+                            if max(line_start, t_map['start']) < min(line_end, t_map['end']):
+                                line_tokens.append({
+                                    "token": t_map['token'],
+                                    "perplexity": t_map['perplexity']
+                                })
+                        
+                        # Stocker dans un champ custom 'extra_data' (pas standard labelme mais ignoré par UI)
+                        # ou dans 'description' au format JSON
+                        shape["token_info"] = line_tokens
+                        
+                        # Calculer stats pour flags ou description
+                        if line_tokens:
+                            valid_perps = [t['perplexity'] for t in line_tokens if t['perplexity'] is not None]
+                            if valid_perps:
+                                avg_perp = sum(valid_perps) / len(valid_perps)
+                                max_perp = max(valid_perps)
+                                shape["description"] += f"Avg Perp: {avg_perp:.2f} | Max Perp: {max_perp:.2f}"
+                
                 shapes.append(shape)
             except Exception as line_error:
                 has_parsing_error = True
