@@ -7,6 +7,7 @@ au format LabelMe, permettant la visualisation des bounding boxes.
 
 import base64
 import math
+from io import BytesIO
 from typing import Dict, Tuple, List, Optional
 
 from PIL import Image
