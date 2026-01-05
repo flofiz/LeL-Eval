@@ -635,7 +635,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }}], {{
             xaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
             margin: {{ l: 180, r: 30, t: 20, b: 40 }},
-            autosize: true
+            height: Math.max(450, reportData.doc_names.length * 30),
+            autosize: true,
+            shapes: [
+                {{ type: 'line', x0: reportData.doc_cers.reduce((a,b) => a+b, 0) / reportData.doc_cers.length, x1: reportData.doc_cers.reduce((a,b) => a+b, 0) / reportData.doc_cers.length, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                {{ type: 'line', x0: [...reportData.doc_cers].sort((a,b) => a-b)[Math.floor(reportData.doc_cers.length/2)], x1: [...reportData.doc_cers].sort((a,b) => a-b)[Math.floor(reportData.doc_cers.length/2)], y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
+            ]
         }}, {{ responsive: true }});
         
         // IoU par document
@@ -783,8 +788,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }}], {{
             xaxis: {{ title: 'CER (%)', type: 'log', range: [0, 2] }},
             margin: {{ l: 180, r: 30, t: 20, b: 40 }},
-            height: Math.max(400, reportData.doc_names.length * 25),
-            autosize: true
+            height: Math.max(500, reportData.doc_names.length * 35),
+            autosize: true,
+            shapes: [
+                {{ type: 'line', x0: reportData.doc_cers.reduce((a,b) => a+b, 0) / reportData.doc_cers.length, x1: reportData.doc_cers.reduce((a,b) => a+b, 0) / reportData.doc_cers.length, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                {{ type: 'line', x0: [...reportData.doc_cers].sort((a,b) => a-b)[Math.floor(reportData.doc_cers.length/2)], x1: [...reportData.doc_cers].sort((a,b) => a-b)[Math.floor(reportData.doc_cers.length/2)], y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
+            ]
         }}, {{ responsive: true }});
         
         // Radar chart
@@ -1091,6 +1100,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             // CER par document (ne pas filtrer ici si on veut comparer les docs, ou filtrer si on est en focus doc)
             // Si docFilter != 'all', on pourrait montrer un graphique différent, mais gardons la cohérence.
             const docCers = reportData.doc_cers_by_norm[normKey] || reportData.doc_cers;
+            const meanDocCer = docCers.reduce((a, b) => a + b, 0) / docCers.length;
+            const sortedDocCers = [...docCers].sort((a, b) => a - b);
+            const medianDocCer = sortedDocCers[Math.floor(sortedDocCers.length / 2)];
+            
             Plotly.react('cer-by-document', [{{
                 y: reportData.doc_names,
                 x: docCers,
@@ -1101,7 +1114,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }}], {{
                 xaxis: {{ title: 'CER (%)', type: scaleStates['cer-by-document'] === false ? 'linear' : 'log', range: scaleStates['cer-by-document'] === false ? [0, 100] : [0, 2] }},
                 margin: {{ l: 180, r: 30, t: 20, b: 40 }},
-                autosize: true
+                height: Math.max(450, reportData.doc_names.length * 30),
+                autosize: true,
+                shapes: [
+                    {{ type: 'line', x0: meanDocCer, x1: meanDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                    {{ type: 'line', x0: medianDocCer, x1: medianDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
+                ]
             }}, {{ responsive: true }});
             
             // CER vs Segmentation
@@ -1136,8 +1154,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }}], {{
                 xaxis: {{ title: 'CER (%)', type: scaleStates['cer-doc-selected-norm'] === false ? 'linear' : 'log', range: scaleStates['cer-doc-selected-norm'] === false ? [0, 100] : [0, 2] }},
                 margin: {{ l: 180, r: 30, t: 20, b: 40 }},
-                height: Math.max(400, reportData.doc_names.length * 25),
-                autosize: true
+                height: Math.max(500, reportData.doc_names.length * 35),
+                autosize: true,
+                shapes: [
+                    {{ type: 'line', x0: meanDocCer, x1: meanDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                    {{ type: 'line', x0: medianDocCer, x1: medianDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
+                ]
             }}, {{ responsive: true }});
         }}
     </script>
