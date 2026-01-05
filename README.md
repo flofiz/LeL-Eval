@@ -1,0 +1,1 @@
+(rm -r Data/labelme_outputs_generated/ & rm evaluation_results.json & git pull) && python evaluate_model_vllm_full.py
