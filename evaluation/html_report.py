@@ -120,7 +120,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 <div class="d-flex align-items-center">
                     <label class="text-light me-2 small">Normalisation:</label>
-                    <select id="normSelector" class="form-select form-select-sm" style="width: auto;" onchange="refreshDashboard()">
+                    <select id="normSelector" class="form-select form-select-sm" style="width: auto;" onchange="refreshDashboard(); refreshFilterTab()">
                         <option value="base">Base (aucune)</option>
                         <option value="no_accents">Sans accents</option>
                         <option value="lowercase">Minuscules</option>
@@ -181,6 +181,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </li>
             <li class="nav-item">
                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#advanced">⚙️ Avancé</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#filter-analysis">🎯 Filtrage Perplexité</button>
             </li>
         </ul>
 
@@ -473,6 +476,220 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     </div>
                     <div class="card-body">
                         <pre style="max-height: 300px; overflow: auto; font-size: 0.75rem;" id="rawData"></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Onglet Filtrage Perplexité -->
+            <div class="tab-pane fade" id="filter-analysis">
+                <!-- Contrôles des seuils -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">🎛️ Paramètres de Filtrage</div>
+                            <div class="card-body">
+                                <div class="row g-4">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Seuil Perplexité Globale: <span id="thresh-global-val">1.30</span></label>
+                                        <input type="range" class="form-range" id="thresh-global" min="0.5" max="3.0" step="0.05" value="1.3" oninput="updateFilterThresholds()">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Seuil Perplexité Transcription: <span id="thresh-trans-val">1.20</span></label>
+                                        <input type="range" class="form-range" id="thresh-trans" min="0.5" max="3.0" step="0.05" value="1.2" oninput="updateFilterThresholds()">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Seuil CER "Bonne Page" (%): <span id="thresh-cer-val">10</span>%</label>
+                                        <input type="range" class="form-range" id="thresh-cer" min="1" max="30" step="1" value="10" oninput="updateFilterThresholds()">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Métriques de filtrage -->
+                <div class="row g-4 mb-4">
+                    <div class="col-md-2">
+                        <div class="metric-card">
+                            <div class="metric-value" id="filter-precision">-</div>
+                            <div class="metric-label">Précision</div>
+                            <small class="text-muted">TP / (TP + FP)</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="metric-card">
+                            <div class="metric-value" id="filter-recall">-</div>
+                            <div class="metric-label">Rappel</div>
+                            <small class="text-muted">TP / (TP + FN)</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="metric-card">
+                            <div class="metric-value" id="filter-f1">-</div>
+                            <div class="metric-label">F1 Score</div>
+                            <small class="text-muted">Harmonic mean</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="metric-card">
+                            <div class="metric-value" id="filter-accept-rate">-</div>
+                            <div class="metric-label">Taux Acceptation</div>
+                            <small class="text-muted">Acceptées / Total</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="metric-card">
+                            <div class="metric-value" id="filter-accepted-cer">-</div>
+                            <div class="metric-label">CER Acceptées</div>
+                            <small class="text-muted">Micro-CER</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="metric-card">
+                            <div class="metric-value" id="filter-rejected-cer">-</div>
+                            <div class="metric-label">CER Rejetées</div>
+                            <small class="text-muted">Micro-CER</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Graphique acceptance par document -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">Taux d'Acceptation par Document</div>
+                            <div class="card-body">
+                                <div id="filter-doc-acceptance" class="plotly-graph"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sous-onglets Acceptées/Rejetées -->
+                <ul class="nav nav-pills mb-3">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#accepted-pages">✅ Pages Acceptées</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="pill" data-bs-target="#rejected-pages">❌ Pages Rejetées</button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content">
+                    <!-- Sous-onglet Pages Acceptées -->
+                    <div class="tab-pane fade show active" id="accepted-pages">
+                        <div class="row g-4 mb-4">
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="accepted-micro-cer">-</div>
+                                    <div class="metric-label">Micro-CER</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="accepted-macro-cer">-</div>
+                                    <div class="metric-label">Macro-CER</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="accepted-count">-</div>
+                                    <div class="metric-label">Nb Pages</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="accepted-avg-iou">-</div>
+                                    <div class="metric-label">IoU Moyen</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12 col-lg-6">
+                                <div class="card">
+                                    <div class="card-header">Distribution CER (Acceptées)</div>
+                                    <div class="card-body">
+                                        <div id="accepted-cer-dist" class="plotly-graph"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-lg-6">
+                                <div class="card">
+                                    <div class="card-header">Distribution IoU (Acceptées)</div>
+                                    <div class="card-body">
+                                        <div id="accepted-iou-dist" class="plotly-graph"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">CER vs Complexité (Acceptées)</div>
+                                    <div class="card-body">
+                                        <div id="accepted-cer-complexity" class="plotly-graph"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Sous-onglet Pages Rejetées -->
+                    <div class="tab-pane fade" id="rejected-pages">
+                        <div class="row g-4 mb-4">
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="rejected-micro-cer">-</div>
+                                    <div class="metric-label">Micro-CER</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="rejected-macro-cer">-</div>
+                                    <div class="metric-label">Macro-CER</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="rejected-count">-</div>
+                                    <div class="metric-label">Nb Pages</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value" id="rejected-avg-iou">-</div>
+                                    <div class="metric-label">IoU Moyen</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12 col-lg-6">
+                                <div class="card">
+                                    <div class="card-header">Distribution CER (Rejetées)</div>
+                                    <div class="card-body">
+                                        <div id="rejected-cer-dist" class="plotly-graph"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-lg-6">
+                                <div class="card">
+                                    <div class="card-header">Distribution IoU (Rejetées)</div>
+                                    <div class="card-body">
+                                        <div id="rejected-iou-dist" class="plotly-graph"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">CER vs Complexité (Rejetées)</div>
+                                    <div class="card-body">
+                                        <div id="rejected-cer-complexity" class="plotly-graph"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1055,6 +1272,236 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             const label = labels[perpTypeStates[graphId]];
             document.getElementById(graphId + '-label').textContent = 'Perplexité: ' + label;
             refreshDashboard();
+        }}
+        
+        // Filtrage par perplexité - mise à jour des seuils
+        function updateFilterThresholds() {{
+            const threshGlobal = parseFloat(document.getElementById('thresh-global').value);
+            const threshTrans = parseFloat(document.getElementById('thresh-trans').value);
+            const threshCer = parseFloat(document.getElementById('thresh-cer').value);
+            
+            document.getElementById('thresh-global-val').textContent = threshGlobal.toFixed(2);
+            document.getElementById('thresh-trans-val').textContent = threshTrans.toFixed(2);
+            document.getElementById('thresh-cer-val').textContent = threshCer;
+            
+            refreshFilterTab();
+        }}
+        
+        // Rafraîchir l'onglet filtrage
+        function refreshFilterTab() {{
+            try {{
+                const normKey = document.getElementById('normSelector').value;
+                const threshGlobal = parseFloat(document.getElementById('thresh-global').value);
+                const threshTrans = parseFloat(document.getElementById('thresh-trans').value);
+                const threshCer = parseFloat(document.getElementById('thresh-cer').value);
+                
+                // Utiliser CER normalisé pour le ground truth
+                const cerNormalized = reportData.page_cers_by_norm['normalized'] || reportData.page_cers;
+                
+                // Classifier les pages
+                const accepted = [];
+                const rejected = [];
+                
+                for (let i = 0; i < reportData.page_names.length; i++) {{
+                    const perpGlobal = reportData.page_perplexities[i];
+                    const perpTrans = reportData.page_perplexities_trans[i];
+                    
+                    // Une page est acceptée si perp global < seuil ET perp trans < seuil
+                    const isAccepted = perpGlobal !== null && perpTrans !== null &&
+                                       perpGlobal < threshGlobal && perpTrans < threshTrans;
+                    
+                    if (isAccepted) {{
+                        accepted.push(i);
+                    }} else {{
+                        rejected.push(i);
+                    }}
+                }}
+                
+                // Calculer TP, FP, FN, TN
+                let tp = 0, fp = 0, fn = 0, tn = 0;
+                for (let i of accepted) {{
+                    if (cerNormalized[i] < threshCer) {{
+                        tp++; // Bonne page correctement acceptée
+                    }} else {{
+                        fp++; // Mauvaise page incorrectement acceptée
+                    }}
+                }}
+                for (let i of rejected) {{
+                    if (cerNormalized[i] < threshCer) {{
+                        fn++; // Bonne page incorrectement rejetée
+                    }} else {{
+                        tn++; // Mauvaise page correctement rejetée
+                    }}
+                }}
+                
+                // Métriques
+                const precision = (tp + fp) > 0 ? (tp / (tp + fp) * 100) : 0;
+                const recall = (tp + fn) > 0 ? (tp / (tp + fn) * 100) : 0;
+                const f1 = (precision + recall) > 0 ? (2 * precision * recall / (precision + recall)) : 0;
+                const acceptRate = (accepted.length / reportData.page_names.length * 100);
+                
+                document.getElementById('filter-precision').textContent = precision.toFixed(1) + '%';
+                document.getElementById('filter-recall').textContent = recall.toFixed(1) + '%';
+                document.getElementById('filter-f1').textContent = f1.toFixed(1) + '%';
+                document.getElementById('filter-accept-rate').textContent = acceptRate.toFixed(1) + '%';
+                
+                // CER pour acceptées et rejetées (utiliser la normalisation sélectionnée)
+                const rawPageCers = reportData.page_cers_by_norm[normKey] || reportData.page_cers;
+                
+                const acceptedCers = accepted.map(i => rawPageCers[i]);
+                const rejectedCers = rejected.map(i => rawPageCers[i]);
+                
+                const acceptedMicroCer = acceptedCers.length > 0 ? (acceptedCers.reduce((a,b) => a+b, 0) / acceptedCers.length) : 0;
+                const rejectedMicroCer = rejectedCers.length > 0 ? (rejectedCers.reduce((a,b) => a+b, 0) / rejectedCers.length) : 0;
+                
+                document.getElementById('filter-accepted-cer').textContent = acceptedMicroCer.toFixed(1) + '%';
+                document.getElementById('filter-rejected-cer').textContent = rejectedMicroCer.toFixed(1) + '%';
+                
+                // Graphique taux acceptation par document
+                const docAcceptCounts = {{}};
+                const docTotalCounts = {{}};
+                
+                for (let i = 0; i < reportData.page_names.length; i++) {{
+                    const doc = reportData.page_to_doc[i];
+                    if (!docTotalCounts[doc]) {{
+                        docTotalCounts[doc] = 0;
+                        docAcceptCounts[doc] = 0;
+                    }}
+                    docTotalCounts[doc]++;
+                    if (accepted.includes(i)) {{
+                        docAcceptCounts[doc]++;
+                    }}
+                }}
+                
+                const docNamesList = Object.keys(docTotalCounts).sort();
+                const docAccepted = docNamesList.map(d => docAcceptCounts[d]);
+                const docRejected = docNamesList.map(d => docTotalCounts[d] - docAcceptCounts[d]);
+                
+                Plotly.react('filter-doc-acceptance', [
+                    {{
+                        x: docNamesList,
+                        y: docAccepted,
+                        type: 'bar',
+                        name: 'Acceptées',
+                        marker: {{ color: '#10B981' }}
+                    }},
+                    {{
+                        x: docNamesList,
+                        y: docRejected,
+                        type: 'bar',
+                        name: 'Rejetées',
+                        marker: {{ color: '#EF4444' }}
+                    }}
+                ], {{
+                    barmode: 'stack',
+                    xaxis: {{ title: 'Document', tickangle: -45 }},
+                    yaxis: {{ title: 'Nombre de pages' }},
+                    margin: {{ l: 50, r: 30, t: 30, b: 120 }}
+                }}, {{ responsive: true }});
+                
+                // --- Sous-onglet Acceptées ---
+                const acceptedIous = accepted.map(i => reportData.page_ious[i]);
+                const acceptedLines = accepted.map(i => reportData.page_lines[i]);
+                const acceptedNames = accepted.map(i => reportData.page_names[i]);
+                
+                document.getElementById('accepted-count').textContent = accepted.length;
+                document.getElementById('accepted-micro-cer').textContent = acceptedMicroCer.toFixed(1) + '%';
+                document.getElementById('accepted-macro-cer').textContent = acceptedMicroCer.toFixed(1) + '%';
+                document.getElementById('accepted-avg-iou').textContent = acceptedIous.length > 0 ? 
+                    (acceptedIous.reduce((a,b) => a+b, 0) / acceptedIous.length).toFixed(1) + '%' : '-';
+                
+                // Distribution CER Acceptées
+                Plotly.react('accepted-cer-dist', [{{
+                    x: acceptedCers,
+                    type: 'histogram',
+                    marker: {{ color: '#10B981', opacity: 0.7 }},
+                    nbinsx: 20
+                }}], {{
+                    xaxis: {{ title: 'CER (%)' }},
+                    yaxis: {{ title: 'Nombre de pages' }},
+                    margin: {{ l: 50, r: 30, t: 30, b: 50 }}
+                }}, {{ responsive: true }});
+                
+                // Distribution IoU Acceptées
+                Plotly.react('accepted-iou-dist', [{{
+                    x: acceptedIous,
+                    type: 'histogram',
+                    marker: {{ color: '#10B981', opacity: 0.7 }},
+                    nbinsx: 20
+                }}], {{
+                    xaxis: {{ title: 'IoU (%)' }},
+                    yaxis: {{ title: 'Nombre de pages' }},
+                    margin: {{ l: 50, r: 30, t: 30, b: 50 }}
+                }}, {{ responsive: true }});
+                
+                // CER vs Complexité Acceptées
+                Plotly.react('accepted-cer-complexity', [{{
+                    x: acceptedLines,
+                    y: acceptedCers,
+                    mode: 'markers',
+                    type: 'scatter',
+                    text: acceptedNames,
+                    marker: {{ color: acceptedCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
+                    hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
+                }}], {{
+                    xaxis: {{ title: 'Nombre de lignes' }},
+                    yaxis: {{ title: 'CER (%)' }},
+                    margin: {{ l: 50, r: 30, t: 30, b: 50 }}
+                }}, {{ responsive: true }});
+                
+                // --- Sous-onglet Rejetées ---
+                const rejectedIous = rejected.map(i => reportData.page_ious[i]);
+                const rejectedLines = rejected.map(i => reportData.page_lines[i]);
+                const rejectedNames = rejected.map(i => reportData.page_names[i]);
+                
+                document.getElementById('rejected-count').textContent = rejected.length;
+                document.getElementById('rejected-micro-cer').textContent = rejectedMicroCer.toFixed(1) + '%';
+                document.getElementById('rejected-macro-cer').textContent = rejectedMicroCer.toFixed(1) + '%';
+                document.getElementById('rejected-avg-iou').textContent = rejectedIous.length > 0 ? 
+                    (rejectedIous.reduce((a,b) => a+b, 0) / rejectedIous.length).toFixed(1) + '%' : '-';
+                
+                // Distribution CER Rejetées
+                Plotly.react('rejected-cer-dist', [{{
+                    x: rejectedCers,
+                    type: 'histogram',
+                    marker: {{ color: '#EF4444', opacity: 0.7 }},
+                    nbinsx: 20
+                }}], {{
+                    xaxis: {{ title: 'CER (%)' }},
+                    yaxis: {{ title: 'Nombre de pages' }},
+                    margin: {{ l: 50, r: 30, t: 30, b: 50 }}
+                }}, {{ responsive: true }});
+                
+                // Distribution IoU Rejetées
+                Plotly.react('rejected-iou-dist', [{{
+                    x: rejectedIous,
+                    type: 'histogram',
+                    marker: {{ color: '#EF4444', opacity: 0.7 }},
+                    nbinsx: 20
+                }}], {{
+                    xaxis: {{ title: 'IoU (%)' }},
+                    yaxis: {{ title: 'Nombre de pages' }},
+                    margin: {{ l: 50, r: 30, t: 30, b: 50 }}
+                }}, {{ responsive: true }});
+                
+                // CER vs Complexité Rejetées
+                Plotly.react('rejected-cer-complexity', [{{
+                    x: rejectedLines,
+                    y: rejectedCers,
+                    mode: 'markers',
+                    type: 'scatter',
+                    text: rejectedNames,
+                    marker: {{ color: rejectedCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
+                    hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
+                }}], {{
+                    xaxis: {{ title: 'Nombre de lignes' }},
+                    yaxis: {{ title: 'CER (%)' }},
+                    margin: {{ l: 50, r: 30, t: 30, b: 50 }}
+                }}, {{ responsive: true }});
+                
+            }} catch (error) {{
+                console.error("Erreur lors du rafraîchissement du filtrage:", error);
+            }}
         }}
         
         // Mise à jour dynamique selon la normalisation et le document
