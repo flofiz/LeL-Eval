@@ -32,6 +32,70 @@ def image_to_url(base64_image: str) -> str:
 LATIN1_REGEX = r"[\x09\x0A\x0D\x20-\x7E\xA0-\xFF]*"
 
 
+def classify_token_types(logprobs_content: list, full_text: str) -> tuple:
+    """
+    Classifie les tokens en 'transcription' ou 'segmentation' selon leur position dans le TSV.
+    
+    Format TSV: transcription\txmin\tymin\txmax\tymax\tangle
+    - Tokens avant le premier \t de chaque ligne = transcription
+    - Tokens après le premier \t jusqu'au \n = segmentation
+    
+    Args:
+        logprobs_content: Liste des dicts avec 'token' et 'logprob'
+        full_text: Texte complet généré (pour vérification)
+        
+    Returns:
+        Tuple (transcription_logprobs, segmentation_logprobs)
+    """
+    import math
+    
+    transcription_logprobs = []
+    segmentation_logprobs = []
+    
+    # Reconstruire le texte depuis les tokens et tracker la position
+    current_pos = 0
+    in_segmentation = False  # Après le premier \t de la ligne courante
+    
+    for token_data in logprobs_content:
+        token = token_data.get('token', '')
+        logprob = token_data.get('logprob')
+        
+        if logprob is None:
+            current_pos += len(token)
+            continue
+        
+        # Analyser le token pour déterminer sa catégorie
+        # Un token peut contenir plusieurs caractères, et peut traverser les frontières
+        
+        # Simplification: on considère le token entier comme une unité
+        # Si on est en mode segmentation, le token va dans segmentation
+        # Si on rencontre \n, on repasse en mode transcription
+        # Si on rencontre \t et qu'on n'est pas encore en segmentation, on passe en segmentation
+        
+        if in_segmentation:
+            # En mode segmentation
+            segmentation_logprobs.append(logprob)
+            # Vérifier si le token contient un retour à la ligne
+            if '\n' in token:
+                in_segmentation = False  # Nouvelle ligne = retour en mode transcription
+        else:
+            # En mode transcription
+            if '\t' in token:
+                # Ce token contient la transition
+                # On le compte comme segmentation car il marque le début des coordonnées
+                segmentation_logprobs.append(logprob)
+                in_segmentation = True
+            else:
+                transcription_logprobs.append(logprob)
+                # Vérifier si \n pour rester en mode transcription (nouvelle ligne)
+                if '\n' in token:
+                    in_segmentation = False
+        
+        current_pos += len(token)
+    
+    return transcription_logprobs, segmentation_logprobs
+
+
 async def call_vllm_api(session: aiohttp.ClientSession,
                        api_url: str,
                        system_prompt: str,
@@ -108,12 +172,14 @@ async def call_vllm_api(session: aiohttp.ClientSession,
                 # Extraire les logprobs si disponibles
                 logprobs_data = None
                 perplexity = None
+                perplexity_transcription = None
+                perplexity_segmentation = None
                 
                 choice = result['choices'][0]
                 if 'logprobs' in choice and choice['logprobs'] is not None:
                     logprobs_content = choice['logprobs'].get('content', [])
                     if logprobs_content:
-                        # Calculer la perplexité: exp(-moyenne des log probs)
+                        # Calculer la perplexité globale: exp(-moyenne des log probs)
                         log_probs = []
                         for token_info in logprobs_content:
                             if 'logprob' in token_info:
@@ -124,22 +190,35 @@ async def call_vllm_api(session: aiohttp.ClientSession,
                             perplexity = math.exp(-avg_log_prob)
                             # Return full logprobs content for detailed analysis
                             logprobs_data = logprobs_content
+                        
+                        # Calculer perplexité par type de token (transcription vs segmentation)
+                        trans_logprobs, seg_logprobs = classify_token_types(logprobs_content, content)
+                        
+                        if trans_logprobs:
+                            avg_trans = sum(trans_logprobs) / len(trans_logprobs)
+                            perplexity_transcription = math.exp(-avg_trans)
+                        
+                        if seg_logprobs:
+                            avg_seg = sum(seg_logprobs) / len(seg_logprobs)
+                            perplexity_segmentation = math.exp(-avg_seg)
                 
                 return {
                     'content': content,
                     'logprobs': logprobs_data,
-                    'perplexity': perplexity
+                    'perplexity': perplexity,
+                    'perplexity_transcription': perplexity_transcription,
+                    'perplexity_segmentation': perplexity_segmentation
                 }
             else:
                 error_text = await response.text()
                 print(f"Erreur API (status {response.status}): {error_text}")
-                return {'content': '', 'logprobs': None, 'perplexity': None}
+                return {'content': '', 'logprobs': None, 'perplexity': None, 'perplexity_transcription': None, 'perplexity_segmentation': None}
     except asyncio.TimeoutError:
         print("Timeout lors de l'appel API")
-        return {'content': '', 'logprobs': None, 'perplexity': None}
+        return {'content': '', 'logprobs': None, 'perplexity': None, 'perplexity_transcription': None, 'perplexity_segmentation': None}
     except Exception as e:
         print(f"Erreur lors de l'appel API: {e}")
-        return {'content': '', 'logprobs': None, 'perplexity': None}
+        return {'content': '', 'logprobs': None, 'perplexity': None, 'perplexity_transcription': None, 'perplexity_segmentation': None}
 
 
 async def process_sample(session: aiohttp.ClientSession,
@@ -176,6 +255,8 @@ async def process_sample(session: aiohttp.ClientSession,
         
         response_text = api_response['content']
         perplexity = api_response['perplexity']
+        perplexity_transcription = api_response.get('perplexity_transcription')
+        perplexity_segmentation = api_response.get('perplexity_segmentation')
         
         # Extraire le TSV de la réponse
         predicted_tsv = extract_tsv_from_response(response_text)
@@ -213,6 +294,8 @@ async def process_sample(session: aiohttp.ClientSession,
             'predicted': predicted_tsv,
             'ground_truth': sample['tsv'],
             'full_response': response_text,
-            'perplexity': perplexity
+            'perplexity': perplexity,
+            'perplexity_transcription': perplexity_transcription,
+            'perplexity_segmentation': perplexity_segmentation
         }
 
