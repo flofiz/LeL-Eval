@@ -1174,6 +1174,85 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 }}, {{ responsive: true }});
             }}
             
+            // Perplexity vs Training Pages (Page Level)
+            const pageTrainCount = filteredIndices.map(i => reportData.page_training_count[i]);
+            // Filter valid values
+             const validTrainPageIndices = [];
+             for(let i=0; i<pagePerps.length; i++) {{
+                 if(pagePerps[i] !== null && pagePerps[i] !== undefined) {{
+                     validTrainPageIndices.push(i);
+                 }}
+             }}
+             
+             if (validTrainPageIndices.length > 0) {{
+                 const x = validTrainPageIndices.map(i => pageTrainCount[i]);
+                 const y = validTrainPageIndices.map(i => pagePerps[i]);
+                 const c = validTrainPageIndices.map(i => pageCers[i]);
+                 const t = validTrainPageIndices.map(i => pageNames[i]);
+                 
+                 Plotly.react('perp-vs-training-page', [{{
+                    x: x,
+                    y: y,
+                    mode: 'markers',
+                    type: 'scatter',
+                    name: 'Pages',
+                    marker: {{
+                        color: c,
+                        colorscale: 'RdYlGn_r',
+                        size: 6,
+                        opacity: 0.6,
+                        colorbar: {{ title: 'CER (%)', len: 0.5 }}
+                    }},
+                    text: t,
+                    hovertemplate: '<b>%{{text}}</b><br>Training Pages (Doc): %{{x}}<br>Perplexity: %{{y:.2f}}<br>CER: %{{marker.color:.2f}}%<extra></extra>'
+                }}], {{
+                    xaxis: {{ title: "Pages d'entraînement (Document)" }},
+                    yaxis: {{ title: 'Perplexité Page' }},
+                    margin: {{ l: 50, r: 20, t: 20, b: 40 }}
+                }}, {{ responsive: true }});
+             }}
+
+            // Perplexity vs Training Pages (Document Level)
+            const docPerps = reportData.doc_perplexities;
+            const docTrain = reportData.doc_training_count;
+            // Respect docCers which depends on normalization
+            
+            const validDocTrainIndices = [];
+            for (let i=0; i<docPerps.length; i++) {{
+                if (docPerps[i] !== null && docPerps[i] !== undefined) {{
+                    validDocTrainIndices.push(i);
+                }}
+            }}
+            
+            if (validDocTrainIndices.length > 0) {{
+                const x = validDocTrainIndices.map(i => docTrain[i]);
+                const y = validDocTrainIndices.map(i => docPerps[i]);
+                const c = validDocTrainIndices.map(i => docCers[i]); // Recalculated docCers
+                const t = validDocTrainIndices.map(i => reportData.doc_names[i]);
+
+                Plotly.react('perp-vs-training-doc', [{{
+                    x: x,
+                    y: y,
+                    mode: 'markers',
+                    type: 'scatter',
+                    name: 'Documents',
+                    marker: {{
+                        color: c,
+                        colorscale: 'RdYlGn_r',
+                        size: 10,
+                        colorbar: {{ title: 'CER (%)', len: 0.5 }},
+                        line: {{ color: 'white', width: 1 }}
+                    }},
+                    text: t,
+                    hovertemplate: '<b>%{{text}}</b><br>Training Pages: %{{x}}<br>Avg Perplexity: %{{y:.2f}}<br>Avg CER: %{{marker.color:.2f}}%<extra></extra>'
+                }}], {{
+                    xaxis: {{ title: "Pages d'entraînement" }},
+                    yaxis: {{ title: 'Perplexité Moyenne' }},
+                    margin: {{ l: 50, r: 20, t: 20, b: 40 }}
+                }}, {{ responsive: true }});
+            }}
+
+            
             // CER vs Erreurs de Segmentation (par page)
             const pageSegErrors = filteredIndices.map(i => reportData.page_seg_errors[i]);
             Plotly.react('cer-seg-page', [{{
