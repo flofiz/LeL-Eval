@@ -224,7 +224,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <span>CER vs Perplexité</span>
                                 <div class="d-flex gap-2">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="togglePerpType('cer-perplexity')">🔀 Global/Transcription</button>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="cyclePerpType('cer-perplexity')">🔀 Global/Trans/Seg</button>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="toggleScale('cer-perplexity')">📊 Log/Lin</button>
                                 </div>
                             </div>
@@ -1039,12 +1039,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         
         // Binary toggle for perplexity type (Global ↔ specific type)
         function togglePerpType(graphId) {{
-            if (graphId === 'cer-perplexity') {{
-                // Toggle between 0 (global) and 1 (transcription)
-                perpTypeStates[graphId] = perpTypeStates[graphId] === 0 ? 1 : 0;
-                const label = perpTypeStates[graphId] === 0 ? 'Globale' : 'Transcription';
-                document.getElementById('cer-perplexity-label').textContent = 'Perplexité: ' + label;
-            }} else if (graphId === 'iou-perplexity') {{
+            if (graphId === 'iou-perplexity') {{
                 // Toggle between 0 (global) and 2 (segmentation)
                 perpTypeStates[graphId] = perpTypeStates[graphId] === 0 ? 2 : 0;
                 const label = perpTypeStates[graphId] === 0 ? 'Globale' : 'Segmentation';
@@ -1186,7 +1181,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 const cerPerpType = perpTypeStates['cer-perplexity'];
                 const pagePerpsForCer = cerPerpType === 0 
                     ? filteredIndices.map(i => reportData.page_perplexities[i])
-                    : filteredIndices.map(i => reportData.page_perplexities_trans[i]);
+                    : (cerPerpType === 1 
+                        ? filteredIndices.map(i => reportData.page_perplexities_trans[i])
+                        : filteredIndices.map(i => reportData.page_perplexities_seg[i]));
                 
                 // Collecter toutes les perplexités pour le tooltip détaillé
                 const allPagePerps = filteredIndices.map(i => reportData.page_perplexities[i]);
@@ -1226,7 +1223,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     const xMaxP = Math.max(...validPerp);
                     const corrDenomP = Math.sqrt((nP * sumX2P - sumXP * sumXP) * (nP * sumY2P - sumYP * sumYP));
                     const correlationP = corrDenomP > 0 ? (nP * sumXYP - sumXP * sumYP) / corrDenomP : 0;
-                    const perpLabel = cerPerpType === 0 ? 'Perplexité Globale' : 'Perplexité Transcription';
+                    const perpLabels = ['Perplexité Globale', 'Perplexité Transcription', 'Perplexité Segmentation'];
+                    const perpLabel = perpLabels[cerPerpType];
                     
                     // Préparer customdata pour le tooltip détaillé
                     const customData = validPerpGlobal.map((g, idx) => [
