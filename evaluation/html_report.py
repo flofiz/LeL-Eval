@@ -1002,342 +1002,350 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         
         // Mise à jour dynamique selon la normalisation et le document
         function refreshDashboard() {{
-            const normKey = document.getElementById('normSelector').value;
-            const docFilter = document.getElementById('docSelector').value;
-            
-            // 1. Filtrer les données par document
-            let filteredIndices = [];
-            for (let i = 0; i < reportData.page_names.length; i++) {{
-                if (docFilter === 'all' || reportData.page_to_doc[i] === docFilter) {{
-                    filteredIndices.push(i);
-                }}
-            }}
-            
-            // 2. Extraire les CER pour la normalisation choisie
-            const rawPageCers = reportData.page_cers_by_norm[normKey] || reportData.page_cers;
-            const pageCers = filteredIndices.map(i => rawPageCers[i]);
-            const pageLines = filteredIndices.map(i => reportData.page_lines[i]);
-            const pageNames = filteredIndices.map(i => reportData.page_names[i]);
-            
-            // 3. Calculer les métriques du bandeau sur les données filtrées
-            const totalErrors = filteredIndices.reduce((sum, idx) => {{
-                return sum + (rawPageCers[idx]/100 * reportData.page_lines[idx]);
-            }}, 0);
-            const totalChars = filteredIndices.reduce((sum, idx) => sum + reportData.page_lines[idx], 0);
-            const microCer = totalChars > 0 ? (totalErrors / totalChars * 100) : 0;
-            
-            // Macro-CER (moyenne simple du CER des pages filtrées)
-            const macroCer = pageCers.length > 0 ? pageCers.reduce((a, b) => a + b, 0) / pageCers.length : 0;
-            
-            // Biais
-            const bias = microCer - macroCer;
-            const biasColor = Math.abs(bias) <= 1 ? '#10B981' : (Math.abs(bias) <= 3 ? '#F59E0B' : '#EF4444');
-            const biasText = Math.abs(bias) <= 1 ? 'Corpus équilibré' : (Math.abs(bias) <= 3 ? 'Biais modéré' : 'Biais important');
-            
-            // Mettre à jour les métriques du bandeau
-            document.getElementById('metric-micro-cer').textContent = microCer.toFixed(1) + '%';
-            document.getElementById('metric-macro-cer').textContent = macroCer.toFixed(1) + '%';
-            document.getElementById('metric-bias').textContent = (bias >= 0 ? '+' : '') + bias.toFixed(1) + 'pp';
-            document.getElementById('metric-bias').style.color = biasColor;
-            document.getElementById('metric-bias-text').textContent = biasText;
-            
-            // 4. Mettre à jour les graphiques
-            
-            // Distribution CER
-            if (pageCers.length > 0) {{
-                const meanCer = pageCers.reduce((a, b) => a + b, 0) / pageCers.length;
-                const sortedCers = [...pageCers].sort((a, b) => a - b);
-                const medianCer = sortedCers.length % 2 === 0 
-                    ? (sortedCers[sortedCers.length/2-1] + sortedCers[sortedCers.length/2]) / 2 
-                    : sortedCers[Math.floor(sortedCers.length/2)];
-                Plotly.react('cer-distribution', [{{
-                    x: pageCers,
-                    type: 'histogram',
-                    marker: {{ color: '#4F46E5', opacity: 0.7 }},
-                    nbinsx: 30
-                }}], {{
-                    xaxis: {{ title: 'CER (%)' }},
-                    yaxis: {{ title: 'Nombre de pages' }},
-                    shapes: [
-                        {{ type: 'line', x0: meanCer, x1: meanCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
-                        {{ type: 'line', x0: medianCer, x1: medianCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
-                    ],
-                    annotations: [
-                        {{ x: meanCer, y: 1, yref: 'paper', text: 'Moyenne: ' + meanCer.toFixed(1) + '%', showarrow: false, yanchor: 'bottom', font: {{ color: '#EF4444' }} }},
-                        {{ x: medianCer, y: 0.9, yref: 'paper', text: 'Médiane: ' + medianCer.toFixed(1) + '%', showarrow: false, yanchor: 'bottom', font: {{ color: '#10B981' }} }}
-                    ]
-                }}, {{ responsive: true }});
-            }}
-            
-            // CER vs Complexité avec trendline
-            const n = pageLines.length;
-            if (n >= 2) {{
-                const sumX = pageLines.reduce((a, b) => a + b, 0);
-                const sumY = pageCers.reduce((a, b) => a + b, 0);
-                const sumXY = pageLines.reduce((acc, xi, i) => acc + xi * pageCers[i], 0);
-                const sumX2 = pageLines.reduce((acc, xi) => acc + xi * xi, 0);
-                const sumY2 = pageCers.reduce((acc, yi) => acc + yi * yi, 0);
-                const denom = n * sumX2 - sumX * sumX;
-                const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
-                const intercept = (sumY - slope * sumX) / n;
-                const xMin = Math.min(...pageLines);
-                const xMax = Math.max(...pageLines);
-                const corrDenom = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
-                const correlation = corrDenom > 0 ? (n * sumXY - sumX * sumY) / corrDenom : 0;
+            try {{
+                const normKey = document.getElementById('normSelector').value;
+                const docFilter = document.getElementById('docSelector').value;
                 
-                Plotly.react('cer-complexity', [
-                    {{
-                        x: pageLines,
-                        y: pageCers,
+                // --- Définitions globales pour la fonction ---
+                // CER par document (utilisé par plusieurs graphiques)
+                const docCers = reportData.doc_cers_by_norm[normKey] || reportData.doc_cers;
+                
+                // 1. Filtrer les données par document
+                let filteredIndices = [];
+                for (let i = 0; i < reportData.page_names.length; i++) {{
+                    if (docFilter === 'all' || reportData.page_to_doc[i] === docFilter) {{
+                        filteredIndices.push(i);
+                    }}
+                }}
+                
+                // 2. Extraire les CER pour la normalisation choisie
+                const rawPageCers = reportData.page_cers_by_norm[normKey] || reportData.page_cers;
+                const pageCers = filteredIndices.map(i => rawPageCers[i]);
+                const pageLines = filteredIndices.map(i => reportData.page_lines[i]);
+                const pageNames = filteredIndices.map(i => reportData.page_names[i]);
+                
+                // 3. Calculer les métriques du bandeau sur les données filtrées
+                const totalErrors = filteredIndices.reduce((sum, idx) => {{
+                    return sum + (rawPageCers[idx]/100 * reportData.page_lines[idx]);
+                }}, 0);
+                const totalChars = filteredIndices.reduce((sum, idx) => sum + reportData.page_lines[idx], 0);
+                const microCer = totalChars > 0 ? (totalErrors / totalChars * 100) : 0;
+                
+                // Macro-CER (moyenne simple du CER des pages filtrées)
+                const macroCer = pageCers.length > 0 ? pageCers.reduce((a, b) => a + b, 0) / pageCers.length : 0;
+                
+                // Biais
+                const bias = microCer - macroCer;
+                const biasColor = Math.abs(bias) <= 1 ? '#10B981' : (Math.abs(bias) <= 3 ? '#F59E0B' : '#EF4444');
+                const biasText = Math.abs(bias) <= 1 ? 'Corpus équilibré' : (Math.abs(bias) <= 3 ? 'Biais modéré' : 'Biais important');
+                
+                // Mettre à jour les métriques du bandeau
+                document.getElementById('metric-micro-cer').textContent = microCer.toFixed(1) + '%';
+                document.getElementById('metric-macro-cer').textContent = macroCer.toFixed(1) + '%';
+                document.getElementById('metric-bias').textContent = (bias >= 0 ? '+' : '') + bias.toFixed(1) + 'pp';
+                document.getElementById('metric-bias').style.color = biasColor;
+                document.getElementById('metric-bias-text').textContent = biasText;
+                
+                // 4. Mettre à jour les graphiques
+                
+                // Distribution CER
+                if (pageCers.length > 0) {{
+                    const meanCer = pageCers.reduce((a, b) => a + b, 0) / pageCers.length;
+                    const sortedCers = [...pageCers].sort((a, b) => a - b);
+                    const medianCer = sortedCers.length % 2 === 0 
+                        ? (sortedCers[sortedCers.length/2-1] + sortedCers[sortedCers.length/2]) / 2 
+                        : sortedCers[Math.floor(sortedCers.length/2)];
+                    Plotly.react('cer-distribution', [{{
+                        x: pageCers,
+                        type: 'histogram',
+                        marker: {{ color: '#4F46E5', opacity: 0.7 }},
+                        nbinsx: 30
+                    }}], {{
+                        xaxis: {{ title: 'CER (%)' }},
+                        yaxis: {{ title: 'Nombre de pages' }},
+                        shapes: [
+                            {{ type: 'line', x0: meanCer, x1: meanCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                            {{ type: 'line', x0: medianCer, x1: medianCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
+                        ],
+                        annotations: [
+                            {{ x: meanCer, y: 1, yref: 'paper', text: 'Moyenne: ' + meanCer.toFixed(1) + '%', showarrow: false, yanchor: 'bottom', font: {{ color: '#EF4444' }} }},
+                            {{ x: medianCer, y: 0.9, yref: 'paper', text: 'Médiane: ' + medianCer.toFixed(1) + '%', showarrow: false, yanchor: 'bottom', font: {{ color: '#10B981' }} }}
+                        ]
+                    }}, {{ responsive: true }});
+                }}
+                
+                // CER vs Complexité avec trendline
+                const n = pageLines.length;
+                if (n >= 2) {{
+                    const sumX = pageLines.reduce((a, b) => a + b, 0);
+                    const sumY = pageCers.reduce((a, b) => a + b, 0);
+                    const sumXY = pageLines.reduce((acc, xi, i) => acc + xi * pageCers[i], 0);
+                    const sumX2 = pageLines.reduce((acc, xi) => acc + xi * xi, 0);
+                    const sumY2 = pageCers.reduce((acc, yi) => acc + yi * yi, 0);
+                    const denom = n * sumX2 - sumX * sumX;
+                    const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+                    const intercept = (sumY - slope * sumX) / n;
+                    const xMin = Math.min(...pageLines);
+                    const xMax = Math.max(...pageLines);
+                    const corrDenom = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+                    const correlation = corrDenom > 0 ? (n * sumXY - sumX * sumY) / corrDenom : 0;
+                    
+                    Plotly.react('cer-complexity', [
+                        {{
+                            x: pageLines,
+                            y: pageCers,
+                            mode: 'markers',
+                            type: 'scatter',
+                            name: 'Pages',
+                            marker: {{ color: pageCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
+                            text: pageNames,
+                            hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
+                        }},
+                        {{
+                            x: [xMin, xMax],
+                            y: [slope * xMin + intercept, slope * xMax + intercept],
+                            mode: 'lines',
+                            type: 'scatter',
+                            name: 'Tendance (r=' + correlation.toFixed(2) + ')',
+                            line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
+                        }}
+                    ], {{
+                        xaxis: {{ title: 'Nombre de lignes' }},
+                        yaxis: {{ title: 'CER (%)', type: scaleStates['cer-complexity'] === false ? 'linear' : 'log', range: scaleStates['cer-complexity'] === false ? [0, 100] : [0, 2] }},
+                        margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                        shapes: [
+                            {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                            {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+                        ]
+                    }}, {{ responsive: true }});
+                }}
+                
+                // CER vs Perplexité
+                const pagePerps = filteredIndices.map(i => reportData.page_perplexities[i]);
+                const validPerp = [];
+                const validCersPerp = [];
+                const validNamesPerp = [];
+                for (let i = 0; i < pagePerps.length; i++) {{
+                    if (pagePerps[i] !== null && pagePerps[i] !== undefined) {{
+                        validPerp.push(pagePerps[i]);
+                        validCersPerp.push(pageCers[i]);
+                        validNamesPerp.push(pageNames[i]);
+                    }}
+                }}
+                
+                if (validPerp.length >= 2) {{
+                    // Calcul trendline pour perplexité
+                    const nP = validPerp.length;
+                    const sumXP = validPerp.reduce((a, b) => a + b, 0);
+                    const sumYP = validCersPerp.reduce((a, b) => a + b, 0);
+                    const sumXYP = validPerp.reduce((acc, xi, i) => acc + xi * validCersPerp[i], 0);
+                    const sumX2P = validPerp.reduce((acc, xi) => acc + xi * xi, 0);
+                    const sumY2P = validCersPerp.reduce((acc, yi) => acc + yi * yi, 0);
+                    const denomP = nP * sumX2P - sumXP * sumXP;
+                    const slopeP = denomP !== 0 ? (nP * sumXYP - sumXP * sumYP) / denomP : 0;
+                    const interceptP = (sumYP - slopeP * sumXP) / nP;
+                    const xMinP = Math.min(...validPerp);
+                    const xMaxP = Math.max(...validPerp);
+                    const corrDenomP = Math.sqrt((nP * sumX2P - sumXP * sumXP) * (nP * sumY2P - sumYP * sumYP));
+                    const correlationP = corrDenomP > 0 ? (nP * sumXYP - sumXP * sumYP) / corrDenomP : 0;
+                    
+                    Plotly.react('cer-perplexity', [
+                        {{
+                            x: validPerp,
+                            y: validCersPerp,
+                            mode: 'markers',
+                            type: 'scatter',
+                            name: 'Pages',
+                            marker: {{ color: validCersPerp, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
+                            text: validNamesPerp,
+                            hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.2f}}<br>CER: %{{y:.2f}}%<extra></extra>'
+                        }},
+                        {{
+                            x: [xMinP, xMaxP],
+                            y: [slopeP * xMinP + interceptP, slopeP * xMaxP + interceptP],
+                            mode: 'lines',
+                            type: 'scatter',
+                            name: 'Tendance (r=' + correlationP.toFixed(2) + ')',
+                            line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
+                        }}
+                    ], {{
+                        xaxis: {{ title: 'Perplexité' }},
+                        yaxis: {{ title: 'CER (%)', type: scaleStates['cer-perplexity'] === false ? 'linear' : 'log', range: scaleStates['cer-perplexity'] === false ? [0, 100] : [0, 2] }},
+                        margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                        shapes: [
+                            {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                            {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+                        ]
+                    }}, {{ responsive: true }});
+                }}
+                
+                // Perplexity vs Training Pages (Page Level)
+                const pageTrainCount = filteredIndices.map(i => reportData.page_training_count[i]);
+                const validTrainPageIndices = [];
+                for(let i=0; i<pagePerps.length; i++) {{
+                    if(pagePerps[i] !== null && pagePerps[i] !== undefined) {{
+                        validTrainPageIndices.push(i);
+                    }}
+                }}
+                
+                if (validTrainPageIndices.length > 0) {{
+                    const x = validTrainPageIndices.map(i => pageTrainCount[i]);
+                    const y = validTrainPageIndices.map(i => pagePerps[i]);
+                    const c = validTrainPageIndices.map(i => pageCers[i]);
+                    const t = validTrainPageIndices.map(i => pageNames[i]);
+                    
+                    Plotly.react('perp-vs-training-page', [{{
+                        x: x,
+                        y: y,
                         mode: 'markers',
                         type: 'scatter',
                         name: 'Pages',
-                        marker: {{ color: pageCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
-                        text: pageNames,
-                        hovertemplate: '<b>%{{text}}</b><br>Lignes: %{{x}}<br>CER: %{{y:.2f}}%<extra></extra>'
-                    }},
-                    {{
-                        x: [xMin, xMax],
-                        y: [slope * xMin + intercept, slope * xMax + intercept],
-                        mode: 'lines',
-                        type: 'scatter',
-                        name: 'Tendance (r=' + correlation.toFixed(2) + ')',
-                        line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
-                    }}
-                ], {{
-                    xaxis: {{ title: 'Nombre de lignes' }},
-                    yaxis: {{ title: 'CER (%)', type: scaleStates['cer-complexity'] === false ? 'linear' : 'log', range: scaleStates['cer-complexity'] === false ? [0, 100] : [0, 2] }},
-                    margin: {{ l: 60, r: 30, t: 30, b: 50 }},
-                    shapes: [
-                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
-                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
-                    ]
-                }}, {{ responsive: true }});
-            }}
-            
-            // CER vs Perplexité
-            const pagePerps = filteredIndices.map(i => reportData.page_perplexities[i]);
-            const validPerp = [];
-            const validCersPerp = [];
-            const validNamesPerp = [];
-            for (let i = 0; i < pagePerps.length; i++) {{
-                if (pagePerps[i] !== null && pagePerps[i] !== undefined) {{
-                    validPerp.push(pagePerps[i]);
-                    validCersPerp.push(pageCers[i]);
-                    validNamesPerp.push(pageNames[i]);
+                        marker: {{
+                            color: c,
+                            colorscale: 'RdYlGn_r',
+                            size: 6,
+                            opacity: 0.6,
+                            colorbar: {{ title: 'CER (%)', len: 0.5 }}
+                        }},
+                        text: t,
+                        hovertemplate: '<b>%{{text}}</b><br>Training Pages (Doc): %{{x}}<br>Perplexity: %{{y:.2f}}<br>CER: %{{marker.color:.2f}}%<extra></extra>'
+                    }}], {{
+                        xaxis: {{ title: "Pages d'entraînement (Document)" }},
+                        yaxis: {{ title: 'Perplexité Page' }},
+                        margin: {{ l: 50, r: 20, t: 20, b: 40 }}
+                    }}, {{ responsive: true }});
                 }}
-            }}
-            
-            if (validPerp.length >= 2) {{
-                // Calcul trendline pour perplexité
-                const nP = validPerp.length;
-                const sumXP = validPerp.reduce((a, b) => a + b, 0);
-                const sumYP = validCersPerp.reduce((a, b) => a + b, 0);
-                const sumXYP = validPerp.reduce((acc, xi, i) => acc + xi * validCersPerp[i], 0);
-                const sumX2P = validPerp.reduce((acc, xi) => acc + xi * xi, 0);
-                const sumY2P = validCersPerp.reduce((acc, yi) => acc + yi * yi, 0);
-                const denomP = nP * sumX2P - sumXP * sumXP;
-                const slopeP = denomP !== 0 ? (nP * sumXYP - sumXP * sumYP) / denomP : 0;
-                const interceptP = (sumYP - slopeP * sumXP) / nP;
-                const xMinP = Math.min(...validPerp);
-                const xMaxP = Math.max(...validPerp);
-                const corrDenomP = Math.sqrt((nP * sumX2P - sumXP * sumXP) * (nP * sumY2P - sumYP * sumYP));
-                const correlationP = corrDenomP > 0 ? (nP * sumXYP - sumXP * sumYP) / corrDenomP : 0;
+
+                // Perplexity vs Training Pages (Document Level)
+                const docPerps = reportData.doc_perplexities;
+                const docTrain = reportData.doc_training_count;
+                // docCers is already defined at top of function
                 
-                Plotly.react('cer-perplexity', [
-                    {{
-                        x: validPerp,
-                        y: validCersPerp,
+                const validDocTrainIndices = [];
+                for (let i=0; i<docPerps.length; i++) {{
+                    if (docPerps[i] !== null && docPerps[i] !== undefined) {{
+                        validDocTrainIndices.push(i);
+                    }}
+                }}
+                
+                if (validDocTrainIndices.length > 0) {{
+                    const x = validDocTrainIndices.map(i => docTrain[i]);
+                    const y = validDocTrainIndices.map(i => docPerps[i]);
+                    const c = validDocTrainIndices.map(i => docCers[i]);
+                    const t = validDocTrainIndices.map(i => reportData.doc_names[i]);
+
+                    Plotly.react('perp-vs-training-doc', [{{
+                        x: x,
+                        y: y,
                         mode: 'markers',
                         type: 'scatter',
-                        name: 'Pages',
-                        marker: {{ color: validCersPerp, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
-                        text: validNamesPerp,
-                        hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.2f}}<br>CER: %{{y:.2f}}%<extra></extra>'
-                    }},
-                    {{
-                        x: [xMinP, xMaxP],
-                        y: [slopeP * xMinP + interceptP, slopeP * xMaxP + interceptP],
-                        mode: 'lines',
-                        type: 'scatter',
-                        name: 'Tendance (r=' + correlationP.toFixed(2) + ')',
-                        line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
-                    }}
-                ], {{
-                    xaxis: {{ title: 'Perplexité' }},
-                    yaxis: {{ title: 'CER (%)', type: scaleStates['cer-perplexity'] === false ? 'linear' : 'log', range: scaleStates['cer-perplexity'] === false ? [0, 100] : [0, 2] }},
-                    margin: {{ l: 60, r: 30, t: 30, b: 50 }},
-                    shapes: [
-                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
-                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
-                    ]
-                }}, {{ responsive: true }});
-            }}
-            
-            // Perplexity vs Training Pages (Page Level)
-            const pageTrainCount = filteredIndices.map(i => reportData.page_training_count[i]);
-            // Filter valid values
-             const validTrainPageIndices = [];
-             for(let i=0; i<pagePerps.length; i++) {{
-                 if(pagePerps[i] !== null && pagePerps[i] !== undefined) {{
-                     validTrainPageIndices.push(i);
-                 }}
-             }}
-             
-             if (validTrainPageIndices.length > 0) {{
-                 const x = validTrainPageIndices.map(i => pageTrainCount[i]);
-                 const y = validTrainPageIndices.map(i => pagePerps[i]);
-                 const c = validTrainPageIndices.map(i => pageCers[i]);
-                 const t = validTrainPageIndices.map(i => pageNames[i]);
-                 
-                 Plotly.react('perp-vs-training-page', [{{
-                    x: x,
-                    y: y,
+                        name: 'Documents',
+                        marker: {{
+                            color: c,
+                            colorscale: 'RdYlGn_r',
+                            size: 10,
+                            colorbar: {{ title: 'CER (%)', len: 0.5 }},
+                            line: {{ color: 'white', width: 1 }}
+                        }},
+                        text: t,
+                        hovertemplate: '<b>%{{text}}</b><br>Training Pages: %{{x}}<br>Avg Perplexity: %{{y:.2f}}<br>Avg CER: %{{marker.color:.2f}}%<extra></extra>'
+                    }}], {{
+                        xaxis: {{ title: "Pages d'entraînement" }},
+                        yaxis: {{ title: 'Perplexité Moyenne' }},
+                        margin: {{ l: 50, r: 20, t: 20, b: 40 }}
+                    }}, {{ responsive: true }});
+                }}
+
+                
+                // CER vs Erreurs de Segmentation (par page)
+                const pageSegErrors = filteredIndices.map(i => reportData.page_seg_errors[i]);
+                Plotly.react('cer-seg-page', [{{
+                    x: pageSegErrors,
+                    y: pageCers,
                     mode: 'markers',
                     type: 'scatter',
                     name: 'Pages',
-                    marker: {{
-                        color: c,
-                        colorscale: 'RdYlGn_r',
-                        size: 6,
-                        opacity: 0.6,
-                        colorbar: {{ title: 'CER (%)', len: 0.5 }}
-                    }},
-                    text: t,
-                    hovertemplate: '<b>%{{text}}</b><br>Training Pages (Doc): %{{x}}<br>Perplexity: %{{y:.2f}}<br>CER: %{{marker.color:.2f}}%<extra></extra>'
+                    marker: {{ color: pageCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
+                    text: pageNames,
+                    hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
                 }}], {{
-                    xaxis: {{ title: "Pages d'entraînement (Document)" }},
-                    yaxis: {{ title: 'Perplexité Page' }},
-                    margin: {{ l: 50, r: 20, t: 20, b: 40 }}
+                    xaxis: {{ title: 'Taux erreur segmentation (%)' }},
+                    yaxis: {{ title: 'CER (%)', type: scaleStates['cer-seg-page'] === false ? 'linear' : 'log', range: scaleStates['cer-seg-page'] === false ? [0, 100] : [0, 2] }},
+                    margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                    shapes: [
+                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
+                        {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
+                    ]
                 }}, {{ responsive: true }});
-             }}
-
-            // Perplexity vs Training Pages (Document Level)
-            const docPerps = reportData.doc_perplexities;
-            const docTrain = reportData.doc_training_count;
-            // Respect docCers which depends on normalization
-            
-            const validDocTrainIndices = [];
-            for (let i=0; i<docPerps.length; i++) {{
-                if (docPerps[i] !== null && docPerps[i] !== undefined) {{
-                    validDocTrainIndices.push(i);
-                }}
-            }}
-            
-            if (validDocTrainIndices.length > 0) {{
-                const x = validDocTrainIndices.map(i => docTrain[i]);
-                const y = validDocTrainIndices.map(i => docPerps[i]);
-                const c = validDocTrainIndices.map(i => docCers[i]); // Recalculated docCers
-                const t = validDocTrainIndices.map(i => reportData.doc_names[i]);
-
-                Plotly.react('perp-vs-training-doc', [{{
-                    x: x,
-                    y: y,
+                
+                // CER par document
+                const meanDocCer = docCers.reduce((a, b) => a + b, 0) / docCers.length;
+                const sortedDocCers = [...docCers].sort((a, b) => a - b);
+                const medianDocCer = sortedDocCers[Math.floor(sortedDocCers.length / 2)];
+                
+                Plotly.react('cer-by-document', [{{
+                    y: reportData.doc_names,
+                    x: docCers,
+                    type: 'bar',
+                    orientation: 'h',
+                    marker: {{ color: docCers, colorscale: 'RdYlGn' }},
+                    hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
+                }}], {{
+                    xaxis: {{ title: 'CER (%)', type: scaleStates['cer-by-document'] === false ? 'linear' : 'log', range: scaleStates['cer-by-document'] === false ? [0, 100] : [0, 2] }},
+                    margin: {{ l: 180, r: 30, t: 20, b: 40 }},
+                    height: Math.max(450, reportData.doc_names.length * 30),
+                    autosize: true,
+                    shapes: [
+                        {{ type: 'line', x0: meanDocCer, x1: meanDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                        {{ type: 'line', x0: medianDocCer, x1: medianDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
+                    ]
+                }}, {{ responsive: true }});
+                
+                // CER vs Segmentation
+                Plotly.react('cer-vs-segmentation', [{{
+                    x: reportData.doc_seg_errors,
+                    y: docCers,
                     mode: 'markers',
                     type: 'scatter',
                     name: 'Documents',
-                    marker: {{
-                        color: c,
-                        colorscale: 'RdYlGn_r',
-                        size: 10,
-                        colorbar: {{ title: 'CER (%)', len: 0.5 }},
-                        line: {{ color: 'white', width: 1 }}
+                    marker: {{ 
+                        color: docCers, colorscale: 'RdYlGn',
+                        size: reportData.doc_sizes, sizemode: 'area',
+                        sizeref: 2.*Math.max(...reportData.doc_sizes)/(40.**2), sizemin: 4
                     }},
-                    text: t,
-                    hovertemplate: '<b>%{{text}}</b><br>Training Pages: %{{x}}<br>Avg Perplexity: %{{y:.2f}}<br>Avg CER: %{{marker.color:.2f}}%<extra></extra>'
+                    text: reportData.doc_names,
+                    hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
                 }}], {{
-                    xaxis: {{ title: "Pages d'entraînement" }},
-                    yaxis: {{ title: 'Perplexité Moyenne' }},
-                    margin: {{ l: 50, r: 20, t: 20, b: 40 }}
+                    xaxis: {{ title: 'Taux erreur segmentation (%)' }},
+                    yaxis: {{ title: 'CER (%)', type: scaleStates['cer-vs-segmentation'] === false ? 'linear' : 'log', range: scaleStates['cer-vs-segmentation'] === false ? [0, 100] : [0, 2] }},
+                    margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                    height: 350, autosize: true
                 }}, {{ responsive: true }});
+                
+                // CER par Document (normalisation sélectionnée)
+                Plotly.react('cer-doc-selected-norm', [{{
+                    y: reportData.doc_names,
+                    x: docCers,
+                    type: 'bar',
+                    orientation: 'h',
+                    marker: {{ color: docCers, colorscale: 'RdYlGn' }},
+                    hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
+                }}], {{
+                    xaxis: {{ title: 'CER (%)', type: scaleStates['cer-doc-selected-norm'] === false ? 'linear' : 'log', range: scaleStates['cer-doc-selected-norm'] === false ? [0, 100] : [0, 2] }},
+                    margin: {{ l: 180, r: 30, t: 20, b: 40 }},
+                    height: Math.max(500, reportData.doc_names.length * 35),
+                    autosize: true,
+                    shapes: [
+                        {{ type: 'line', x0: meanDocCer, x1: meanDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
+                        {{ type: 'line', x0: medianDocCer, x1: medianDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
+                    ]
+                }}, {{ responsive: true }});
+            
+            }} catch (error) {{
+                console.error("Erreur lors du rafraîchissement du dashboard:", error);
+                document.getElementById('js-error-alert').classList.remove('d-none');
+                document.getElementById('js-error-message').textContent = "Update Error: " + error.name + ": " + error.message;
             }}
-
-            
-            // CER vs Erreurs de Segmentation (par page)
-            const pageSegErrors = filteredIndices.map(i => reportData.page_seg_errors[i]);
-            Plotly.react('cer-seg-page', [{{
-                x: pageSegErrors,
-                y: pageCers,
-                mode: 'markers',
-                type: 'scatter',
-                name: 'Pages',
-                marker: {{ color: pageCers, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
-                text: pageNames,
-                hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
-            }}], {{
-                xaxis: {{ title: 'Taux erreur segmentation (%)' }},
-                yaxis: {{ title: 'CER (%)', type: scaleStates['cer-seg-page'] === false ? 'linear' : 'log', range: scaleStates['cer-seg-page'] === false ? [0, 100] : [0, 2] }},
-                margin: {{ l: 60, r: 30, t: 30, b: 50 }},
-                shapes: [
-                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 5, y1: 5, line: {{ color: '#10B981', width: 2, dash: 'dash' }} }},
-                    {{ type: 'line', x0: 0, x1: 1, xref: 'paper', y0: 10, y1: 10, line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}
-                ]
-            }}, {{ responsive: true }});
-            
-            // CER par document (ne pas filtrer ici si on veut comparer les docs, ou filtrer si on est en focus doc)
-            // Si docFilter != 'all', on pourrait montrer un graphique différent, mais gardons la cohérence.
-            const docCers = reportData.doc_cers_by_norm[normKey] || reportData.doc_cers;
-            const meanDocCer = docCers.reduce((a, b) => a + b, 0) / docCers.length;
-            const sortedDocCers = [...docCers].sort((a, b) => a - b);
-            const medianDocCer = sortedDocCers[Math.floor(sortedDocCers.length / 2)];
-            
-            Plotly.react('cer-by-document', [{{
-                y: reportData.doc_names,
-                x: docCers,
-                type: 'bar',
-                orientation: 'h',
-                marker: {{ color: docCers, colorscale: 'RdYlGn' }},
-                hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
-            }}], {{
-                xaxis: {{ title: 'CER (%)', type: scaleStates['cer-by-document'] === false ? 'linear' : 'log', range: scaleStates['cer-by-document'] === false ? [0, 100] : [0, 2] }},
-                margin: {{ l: 180, r: 30, t: 20, b: 40 }},
-                height: Math.max(450, reportData.doc_names.length * 30),
-                autosize: true,
-                shapes: [
-                    {{ type: 'line', x0: meanDocCer, x1: meanDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
-                    {{ type: 'line', x0: medianDocCer, x1: medianDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
-                ]
-            }}, {{ responsive: true }});
-            
-            // CER vs Segmentation
-            Plotly.react('cer-vs-segmentation', [{{
-                x: reportData.doc_seg_errors,
-                y: docCers,
-                mode: 'markers',
-                type: 'scatter',
-                name: 'Documents',
-                marker: {{ 
-                    color: docCers, colorscale: 'RdYlGn',
-                    size: reportData.doc_sizes, sizemode: 'area',
-                    sizeref: 2.*Math.max(...reportData.doc_sizes)/(40.**2), sizemin: 4
-                }},
-                text: reportData.doc_names,
-                hovertemplate: '<b>%{{text}}</b><br>Seg Error: %{{x:.1f}}%<br>CER: %{{y:.2f}}%<extra></extra>'
-            }}], {{
-                xaxis: {{ title: 'Taux erreur segmentation (%)' }},
-                yaxis: {{ title: 'CER (%)', type: scaleStates['cer-vs-segmentation'] === false ? 'linear' : 'log', range: scaleStates['cer-vs-segmentation'] === false ? [0, 100] : [0, 2] }},
-                margin: {{ l: 60, r: 30, t: 30, b: 50 }},
-                height: 350, autosize: true
-            }}, {{ responsive: true }});
-            
-            // CER par Document (normalisation sélectionnée)
-            Plotly.react('cer-doc-selected-norm', [{{
-                y: reportData.doc_names,
-                x: docCers,
-                type: 'bar',
-                orientation: 'h',
-                marker: {{ color: docCers, colorscale: 'RdYlGn' }},
-                hovertemplate: '<b>%{{y}}</b><br>CER: %{{x:.2f}}%<extra></extra>'
-            }}], {{
-                xaxis: {{ title: 'CER (%)', type: scaleStates['cer-doc-selected-norm'] === false ? 'linear' : 'log', range: scaleStates['cer-doc-selected-norm'] === false ? [0, 100] : [0, 2] }},
-                margin: {{ l: 180, r: 30, t: 20, b: 40 }},
-                height: Math.max(500, reportData.doc_names.length * 35),
-                autosize: true,
-                shapes: [
-                    {{ type: 'line', x0: meanDocCer, x1: meanDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }},
-                    {{ type: 'line', x0: medianDocCer, x1: medianDocCer, y0: 0, y1: 1, yref: 'paper', line: {{ color: '#10B981', width: 2, dash: 'dot' }} }}
-                ]
-            }}, {{ responsive: true }});
         }}
     </script>
 </body>
