@@ -223,10 +223,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <span>CER vs Perplexité</span>
-                                <button class="btn btn-sm btn-outline-secondary" onclick="toggleScale('cer-perplexity')">📊 Échelle Log/Lin</button>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="togglePerpType('cer-perplexity')">🔀 Global/Transcription</button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleScale('cer-perplexity')">📊 Log/Lin</button>
+                                </div>
                             </div>
                             <div class="card-body">
                                 <div id="cer-perplexity" class="plotly-graph"></div>
+                                <small class="text-muted d-block text-center mt-2" id="cer-perplexity-label">Perplexité: Globale</small>
                             </div>
                         </div>
                     </div>
@@ -236,19 +240,44 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div class="row">
                     <div class="col-12 col-lg-6">
                         <div class="card">
-                            <div class="card-header">Impact Données d'Entraînement (Par Document)</div>
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Impact Données d'Entraînement (Par Document)</span>
+                                <button class="btn btn-sm btn-outline-primary" onclick="cyclePerpType('perp-vs-training-doc')">🔀 Full/Trans/Seg</button>
+                            </div>
                             <div class="card-body">
                                 <div id="perp-vs-training-doc" class="plotly-graph"></div>
-                                <small class="text-muted d-block text-center mt-2">Moyenne Perplexité vs Nb Pages Training (Couleur = CER)</small>
+                                <small class="text-muted d-block text-center mt-2" id="perp-vs-training-doc-label">Perplexité: Globale</small>
                             </div>
                         </div>
                     </div>
                     <div class="col-12 col-lg-6">
                         <div class="card">
-                            <div class="card-header">Impact Données d'Entraînement (Par Page)</div>
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Impact Données d'Entraînement (Par Page)</span>
+                                <button class="btn btn-sm btn-outline-primary" onclick="cyclePerpType('perp-vs-training-page')">🔀 Full/Trans/Seg</button>
+                            </div>
                             <div class="card-body">
                                 <div id="perp-vs-training-page" class="plotly-graph"></div>
-                                <small class="text-muted d-block text-center mt-2">Perplexité Page vs Nb Pages Training du Doc (Couleur = CER)</small>
+                                <small class="text-muted d-block text-center mt-2" id="perp-vs-training-page-label">Perplexité: Globale</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- IoU vs Perplexity -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>IoU vs Perplexité</span>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="togglePerpType('iou-perplexity')">🔀 Global/Segmentation</button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleScale('iou-perplexity')">📊 Log/Lin</button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="iou-perplexity" class="plotly-graph"></div>
+                                <small class="text-muted d-block text-center mt-2" id="iou-perplexity-label">Perplexité: Globale</small>
                             </div>
                         </div>
                     </div>
@@ -1000,6 +1029,39 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             a.click();
         }}
         
+        // Perplexity type state (0=global, 1=transcription, 2=segmentation)
+        var perpTypeStates = {{
+            'cer-perplexity': 0,      // Global ↔ Transcription (binary toggle)
+            'iou-perplexity': 0,      // Global ↔ Segmentation (binary toggle)
+            'perp-vs-training-doc': 0,  // Full/Trans/Seg (3-way cycle)
+            'perp-vs-training-page': 0  // Full/Trans/Seg (3-way cycle)
+        }};
+        
+        // Binary toggle for perplexity type (Global ↔ specific type)
+        function togglePerpType(graphId) {{
+            if (graphId === 'cer-perplexity') {{
+                // Toggle between 0 (global) and 1 (transcription)
+                perpTypeStates[graphId] = perpTypeStates[graphId] === 0 ? 1 : 0;
+                const label = perpTypeStates[graphId] === 0 ? 'Globale' : 'Transcription';
+                document.getElementById('cer-perplexity-label').textContent = 'Perplexité: ' + label;
+            }} else if (graphId === 'iou-perplexity') {{
+                // Toggle between 0 (global) and 2 (segmentation)
+                perpTypeStates[graphId] = perpTypeStates[graphId] === 0 ? 2 : 0;
+                const label = perpTypeStates[graphId] === 0 ? 'Globale' : 'Segmentation';
+                document.getElementById('iou-perplexity-label').textContent = 'Perplexité: ' + label;
+            }}
+            refreshDashboard();
+        }}
+        
+        // 3-way cycle for training impact graphs
+        function cyclePerpType(graphId) {{
+            perpTypeStates[graphId] = (perpTypeStates[graphId] + 1) % 3;
+            const labels = ['Globale', 'Transcription', 'Segmentation'];
+            const label = labels[perpTypeStates[graphId]];
+            document.getElementById(graphId + '-label').textContent = 'Perplexité: ' + label;
+            refreshDashboard();
+        }}
+        
         // Mise à jour dynamique selon la normalisation et le document
         function refreshDashboard() {{
             try {{
@@ -1120,14 +1182,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     }}, {{ responsive: true }});
                 }}
                 
-                // CER vs Perplexité
-                const pagePerps = filteredIndices.map(i => reportData.page_perplexities[i]);
+                // CER vs Perplexité (utilise perpTypeStates pour choisir le type)
+                const cerPerpType = perpTypeStates['cer-perplexity'];
+                const pagePerpsForCer = cerPerpType === 0 
+                    ? filteredIndices.map(i => reportData.page_perplexities[i])
+                    : filteredIndices.map(i => reportData.page_perplexities_trans[i]);
+                
                 const validPerp = [];
                 const validCersPerp = [];
                 const validNamesPerp = [];
-                for (let i = 0; i < pagePerps.length; i++) {{
-                    if (pagePerps[i] !== null && pagePerps[i] !== undefined) {{
-                        validPerp.push(pagePerps[i]);
+                for (let i = 0; i < pagePerpsForCer.length; i++) {{
+                    if (pagePerpsForCer[i] !== null && pagePerpsForCer[i] !== undefined) {{
+                        validPerp.push(pagePerpsForCer[i]);
                         validCersPerp.push(pageCers[i]);
                         validNamesPerp.push(pageNames[i]);
                     }}
@@ -1148,6 +1214,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     const xMaxP = Math.max(...validPerp);
                     const corrDenomP = Math.sqrt((nP * sumX2P - sumXP * sumXP) * (nP * sumY2P - sumYP * sumYP));
                     const correlationP = corrDenomP > 0 ? (nP * sumXYP - sumXP * sumYP) / corrDenomP : 0;
+                    const perpLabel = cerPerpType === 0 ? 'Perplexité Globale' : 'Perplexité Transcription';
                     
                     Plotly.react('cer-perplexity', [
                         {{
@@ -1158,7 +1225,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             name: 'Pages',
                             marker: {{ color: validCersPerp, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
                             text: validNamesPerp,
-                            hovertemplate: '<b>%{{text}}</b><br>Perplexité: %{{x:.2f}}<br>CER: %{{y:.2f}}%<extra></extra>'
+                            hovertemplate: '<b>%{{text}}</b><br>' + perpLabel + ': %{{x:.2f}}<br>CER: %{{y:.2f}}%<extra></extra>'
                         }},
                         {{
                             x: [xMinP, xMaxP],
@@ -1169,7 +1236,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             line: {{ color: '#6B7280', width: 2, dash: 'dash' }}
                         }}
                     ], {{
-                        xaxis: {{ title: 'Perplexité' }},
+                        xaxis: {{ title: perpLabel }},
                         yaxis: {{ title: 'CER (%)', type: scaleStates['cer-perplexity'] === false ? 'linear' : 'log', range: scaleStates['cer-perplexity'] === false ? [0, 100] : [0, 2] }},
                         margin: {{ l: 60, r: 30, t: 30, b: 50 }},
                         shapes: [
@@ -1179,20 +1246,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     }}, {{ responsive: true }});
                 }}
                 
-                // Perplexity vs Training Pages (Page Level)
+                // Perplexity vs Training Pages (Page Level) - avec toggle 3-way
+                const pagePerpType = perpTypeStates['perp-vs-training-page'];
+                const pagePerpsGlobal = filteredIndices.map(i => reportData.page_perplexities[i]);
+                const pagePerpsTrainSel = pagePerpType === 0 
+                    ? pagePerpsGlobal
+                    : (pagePerpType === 1 
+                        ? filteredIndices.map(i => reportData.page_perplexities_trans[i])
+                        : filteredIndices.map(i => reportData.page_perplexities_seg[i]));
+                
                 const pageTrainCount = filteredIndices.map(i => reportData.page_training_count[i]);
                 const validTrainPageIndices = [];
-                for(let i=0; i<pagePerps.length; i++) {{
-                    if(pagePerps[i] !== null && pagePerps[i] !== undefined) {{
+                for(let i=0; i<pagePerpsTrainSel.length; i++) {{
+                    if(pagePerpsTrainSel[i] !== null && pagePerpsTrainSel[i] !== undefined) {{
                         validTrainPageIndices.push(i);
                     }}
                 }}
                 
                 if (validTrainPageIndices.length > 0) {{
                     const x = validTrainPageIndices.map(i => pageTrainCount[i]);
-                    const y = validTrainPageIndices.map(i => pagePerps[i]);
+                    const y = validTrainPageIndices.map(i => pagePerpsTrainSel[i]);
                     const c = validTrainPageIndices.map(i => pageCers[i]);
                     const t = validTrainPageIndices.map(i => pageNames[i]);
+                    const perpLabels = ['Globale', 'Transcription', 'Segmentation'];
+                    const yLabel = 'Perplexité ' + perpLabels[pagePerpType];
                     
                     Plotly.react('perp-vs-training-page', [{{
                         x: x,
@@ -1208,31 +1285,38 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             colorbar: {{ title: 'CER (%)', len: 0.5 }}
                         }},
                         text: t,
-                        hovertemplate: '<b>%{{text}}</b><br>Training Pages (Doc): %{{x}}<br>Perplexity: %{{y:.2f}}<br>CER: %{{marker.color:.2f}}%<extra></extra>'
+                        hovertemplate: '<b>%{{text}}</b><br>Training Pages: %{{x}}<br>' + yLabel + ': %{{y:.2f}}<br>CER: %{{marker.color:.2f}}%<extra></extra>'
                     }}], {{
                         xaxis: {{ title: "Pages d'entraînement (Document)" }},
-                        yaxis: {{ title: 'Perplexité Page' }},
+                        yaxis: {{ title: yLabel }},
                         margin: {{ l: 50, r: 20, t: 20, b: 40 }}
                     }}, {{ responsive: true }});
                 }}
 
-                // Perplexity vs Training Pages (Document Level)
-                const docPerps = reportData.doc_perplexities;
+                // Perplexity vs Training Pages (Document Level) - avec toggle 3-way
+                const docPerpType = perpTypeStates['perp-vs-training-doc'];
+                const docPerpsGlobal = reportData.doc_perplexities;
+                const docPerpsSel = docPerpType === 0 
+                    ? docPerpsGlobal
+                    : (docPerpType === 1 
+                        ? reportData.doc_perplexities_trans
+                        : reportData.doc_perplexities_seg);
                 const docTrain = reportData.doc_training_count;
-                // docCers is already defined at top of function
                 
                 const validDocTrainIndices = [];
-                for (let i=0; i<docPerps.length; i++) {{
-                    if (docPerps[i] !== null && docPerps[i] !== undefined) {{
+                for (let i=0; i<docPerpsSel.length; i++) {{
+                    if (docPerpsSel[i] !== null && docPerpsSel[i] !== undefined) {{
                         validDocTrainIndices.push(i);
                     }}
                 }}
                 
                 if (validDocTrainIndices.length > 0) {{
                     const x = validDocTrainIndices.map(i => docTrain[i]);
-                    const y = validDocTrainIndices.map(i => docPerps[i]);
+                    const y = validDocTrainIndices.map(i => docPerpsSel[i]);
                     const c = validDocTrainIndices.map(i => docCers[i]);
                     const t = validDocTrainIndices.map(i => reportData.doc_names[i]);
+                    const perpLabels = ['Globale', 'Transcription', 'Segmentation'];
+                    const yLabel = 'Perplexité ' + perpLabels[docPerpType];
 
                     Plotly.react('perp-vs-training-doc', [{{
                         x: x,
@@ -1248,11 +1332,48 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             line: {{ color: 'white', width: 1 }}
                         }},
                         text: t,
-                        hovertemplate: '<b>%{{text}}</b><br>Training Pages: %{{x}}<br>Avg Perplexity: %{{y:.2f}}<br>Avg CER: %{{marker.color:.2f}}%<extra></extra>'
+                        hovertemplate: '<b>%{{text}}</b><br>Training Pages: %{{x}}<br>' + yLabel + ': %{{y:.2f}}<br>Avg CER: %{{marker.color:.2f}}%<extra></extra>'
                     }}], {{
                         xaxis: {{ title: "Pages d'entraînement" }},
-                        yaxis: {{ title: 'Perplexité Moyenne' }},
+                        yaxis: {{ title: yLabel }},
                         margin: {{ l: 50, r: 20, t: 20, b: 40 }}
+                    }}, {{ responsive: true }});
+                }}
+
+                // IoU vs Perplexité (avec toggle Global/Segmentation)
+                const iouPerpType = perpTypeStates['iou-perplexity'];
+                const pagePerpsForIou = iouPerpType === 0 
+                    ? filteredIndices.map(i => reportData.page_perplexities[i])
+                    : filteredIndices.map(i => reportData.page_perplexities_seg[i]);
+                const pageIous = filteredIndices.map(i => reportData.page_ious[i]);
+                
+                const validIouPerps = [];
+                const validIous = [];
+                const validIouNames = [];
+                for (let i = 0; i < pagePerpsForIou.length; i++) {{
+                    if (pagePerpsForIou[i] !== null && pagePerpsForIou[i] !== undefined) {{
+                        validIouPerps.push(pagePerpsForIou[i]);
+                        validIous.push(pageIous[i]);
+                        validIouNames.push(pageNames[i]);
+                    }}
+                }}
+                
+                if (validIouPerps.length >= 2) {{
+                    const iouPerpLabel = iouPerpType === 0 ? 'Perplexité Globale' : 'Perplexité Segmentation';
+                    
+                    Plotly.react('iou-perplexity', [{{
+                        x: validIouPerps,
+                        y: validIous,
+                        mode: 'markers',
+                        type: 'scatter',
+                        name: 'Pages',
+                        marker: {{ color: validIous, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
+                        text: validIouNames,
+                        hovertemplate: '<b>%{{text}}</b><br>' + iouPerpLabel + ': %{{x:.2f}}<br>IoU: %{{y:.2f}}%<extra></extra>'
+                    }}], {{
+                        xaxis: {{ title: iouPerpLabel }},
+                        yaxis: {{ title: 'IoU (%)', type: scaleStates['iou-perplexity'] === false ? 'linear' : 'log', range: scaleStates['iou-perplexity'] === false ? [0, 100] : [1, 2.1] }},
+                        margin: {{ l: 60, r: 30, t: 30, b: 50 }}
                     }}, {{ responsive: true }});
                 }}
 
@@ -1403,6 +1524,8 @@ def generate_html_report(
     page_names = [m['name'] for m in all_metrics]
     page_doc_names = [get_document_name(m['name']) for m in all_metrics]
     page_perplexities = [m.get('perplexity') for m in all_metrics]  # Peut contenir des None
+    page_perplexities_trans = [m.get('perplexity_transcription') for m in all_metrics]
+    page_perplexities_seg = [m.get('perplexity_segmentation') for m in all_metrics]
     page_seg_errors = [(1 - m['recall']) * 100 for m in all_metrics]  # Erreurs de segmentation par page
     page_training_count = [training_pages_per_doc.get(dname, 0) for dname in page_doc_names]
     
@@ -1415,14 +1538,31 @@ def generate_html_report(
     doc_sizes = [stats['total_ground_truth'] for _, stats in sorted_docs]
     doc_training_count = [training_pages_per_doc.get(doc, 0) for doc in doc_names]
     
-    # Doc perplexity (moyenne des pages)
+    # Doc perplexity (moyenne des pages) - global, transcription, segmentation
     doc_perplexities = []
+    doc_perplexities_trans = []
+    doc_perplexities_seg = []
     for doc in doc_names:
+        # Global perplexity
         doc_pages_perp = [m.get('perplexity') for m in all_metrics if get_document_name(m['name']) == doc and m.get('perplexity') is not None]
         if doc_pages_perp:
             doc_perplexities.append(sum(doc_pages_perp) / len(doc_pages_perp))
         else:
             doc_perplexities.append(None)
+        
+        # Transcription perplexity
+        doc_pages_trans = [m.get('perplexity_transcription') for m in all_metrics if get_document_name(m['name']) == doc and m.get('perplexity_transcription') is not None]
+        if doc_pages_trans:
+            doc_perplexities_trans.append(sum(doc_pages_trans) / len(doc_pages_trans))
+        else:
+            doc_perplexities_trans.append(None)
+        
+        # Segmentation perplexity
+        doc_pages_seg = [m.get('perplexity_segmentation') for m in all_metrics if get_document_name(m['name']) == doc and m.get('perplexity_segmentation') is not None]
+        if doc_pages_seg:
+            doc_perplexities_seg.append(sum(doc_pages_seg) / len(doc_pages_seg))
+        else:
+            doc_perplexities_seg.append(None)
 
     # Variantes CER
     variant_labels = ['Base', 'Sans accents', 'Minuscules', 'Chars norm.', 'Sans ponct.', 'Abbr. hist.', 'Normalisé']
@@ -1536,6 +1676,8 @@ def generate_html_report(
         'page_lines': page_lines,
         'page_names': page_names,
         'page_perplexities': page_perplexities,
+        'page_perplexities_trans': page_perplexities_trans,
+        'page_perplexities_seg': page_perplexities_seg,
         'page_seg_errors': page_seg_errors,
         'page_training_count': page_training_count,
         'doc_names': doc_names,
@@ -1545,6 +1687,8 @@ def generate_html_report(
         'doc_sizes': doc_sizes,
         'doc_training_count': doc_training_count,
         'doc_perplexities': doc_perplexities,
+        'doc_perplexities_trans': doc_perplexities_trans,
+        'doc_perplexities_seg': doc_perplexities_seg,
         'error_totals': error_totals
     }
     

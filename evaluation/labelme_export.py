@@ -114,25 +114,68 @@ def tsv_to_labelme(tsv_content: str,
                         
                         # Trouver les tokens qui intersectent cette plage
                         line_tokens = []
+                        transcription_logprobs = []
+                        segmentation_logprobs = []
+                        all_logprobs = []
+                        
+                        # Trouver la position du premier tab dans la ligne TSV
+                        first_tab_in_line = line.find('\t')
+                        tab_pos_in_full_text = line_start + first_tab_in_line if first_tab_in_line != -1 else line_end
+                        
                         for t_map in token_char_map:
-                            # Intersection
+                            # Intersection avec cette ligne
                             if max(line_start, t_map['start']) < min(line_end, t_map['end']):
                                 line_tokens.append({
                                     "token": t_map['token'],
                                     "perplexity": t_map['perplexity']
                                 })
+                                
+                                # Classifier comme transcription ou segmentation
+                                # Token avant le tab = transcription, après = segmentation
+                                if t_map['perplexity'] is not None:
+                                    logprob = -math.log(t_map['perplexity']) if t_map['perplexity'] > 0 else None
+                                    if logprob is not None:
+                                        all_logprobs.append(logprob)
+                                        
+                                        # Si le token commence avant le tab -> transcription
+                                        # Si le token commence au tab ou après -> segmentation
+                                        if t_map['start'] < tab_pos_in_full_text and first_tab_in_line != -1:
+                                            transcription_logprobs.append(logprob)
+                                        else:
+                                            segmentation_logprobs.append(logprob)
                         
-                        # Stocker dans un champ custom 'extra_data' (pas standard labelme mais ignoré par UI)
-                        # ou dans 'description' au format JSON
+                        # Stocker les tokens dans un champ custom
                         shape["token_info"] = line_tokens
                         
-                        # Calculer stats pour flags ou description
+                        # Calculer les 3 types de perplexité pour cette ligne
+                        line_perplexity = None
+                        line_perplexity_trans = None
+                        line_perplexity_seg = None
+                        
+                        if all_logprobs:
+                            avg_logprob = sum(all_logprobs) / len(all_logprobs)
+                            line_perplexity = math.exp(-avg_logprob)
+                        
+                        if transcription_logprobs:
+                            avg_trans = sum(transcription_logprobs) / len(transcription_logprobs)
+                            line_perplexity_trans = math.exp(-avg_trans)
+                        
+                        if segmentation_logprobs:
+                            avg_seg = sum(segmentation_logprobs) / len(segmentation_logprobs)
+                            line_perplexity_seg = math.exp(-avg_seg)
+                        
+                        # Ajouter les perplexités à la shape
+                        shape["perplexity"] = line_perplexity
+                        shape["perplexity_transcription"] = line_perplexity_trans
+                        shape["perplexity_segmentation"] = line_perplexity_seg
+                        
+                        # Calculer stats pour description
                         if line_tokens:
                             valid_perps = [t['perplexity'] for t in line_tokens if t['perplexity'] is not None]
                             if valid_perps:
                                 avg_perp = sum(valid_perps) / len(valid_perps)
                                 max_perp = max(valid_perps)
-                                shape["description"] += f"Avg Perp: {avg_perp:.2f} | Max Perp: {max_perp:.2f}"
+                                shape["description"] += f"Perp: {avg_perp:.2f} (Trans: {line_perplexity_trans:.2f if line_perplexity_trans else 'N/A'}, Seg: {line_perplexity_seg:.2f if line_perplexity_seg else 'N/A'})"
                 
                 shapes.append(shape)
             except Exception as line_error:
