@@ -1188,14 +1188,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     ? filteredIndices.map(i => reportData.page_perplexities[i])
                     : filteredIndices.map(i => reportData.page_perplexities_trans[i]);
                 
+                // Collecter toutes les perplexités pour le tooltip détaillé
+                const allPagePerps = filteredIndices.map(i => reportData.page_perplexities[i]);
+                const allPagePerpsTrans = filteredIndices.map(i => reportData.page_perplexities_trans[i]);
+                const allPagePerpsSeg = filteredIndices.map(i => reportData.page_perplexities_seg[i]);
+                
                 const validPerp = [];
                 const validCersPerp = [];
                 const validNamesPerp = [];
+                const validPerpGlobal = [];
+                const validPerpTrans = [];
+                const validPerpSeg = [];
+                
                 for (let i = 0; i < pagePerpsForCer.length; i++) {{
                     if (pagePerpsForCer[i] !== null && pagePerpsForCer[i] !== undefined) {{
                         validPerp.push(pagePerpsForCer[i]);
                         validCersPerp.push(pageCers[i]);
                         validNamesPerp.push(pageNames[i]);
+                        validPerpGlobal.push(allPagePerps[i]);
+                        validPerpTrans.push(allPagePerpsTrans[i]);
+                        validPerpSeg.push(allPagePerpsSeg[i]);
                     }}
                 }}
                 
@@ -1216,6 +1228,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     const correlationP = corrDenomP > 0 ? (nP * sumXYP - sumXP * sumYP) / corrDenomP : 0;
                     const perpLabel = cerPerpType === 0 ? 'Perplexité Globale' : 'Perplexité Transcription';
                     
+                    // Préparer customdata pour le tooltip détaillé
+                    const customData = validPerpGlobal.map((g, idx) => [
+                        g !== null ? g.toFixed(2) : 'N/A',
+                        validPerpTrans[idx] !== null ? validPerpTrans[idx].toFixed(2) : 'N/A',
+                        validPerpSeg[idx] !== null ? validPerpSeg[idx].toFixed(2) : 'N/A'
+                    ]);
+                    
                     Plotly.react('cer-perplexity', [
                         {{
                             x: validPerp,
@@ -1225,7 +1244,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             name: 'Pages',
                             marker: {{ color: validCersPerp, colorscale: 'RdYlGn', size: 8, opacity: 0.6 }},
                             text: validNamesPerp,
-                            hovertemplate: '<b>%{{text}}</b><br>' + perpLabel + ': %{{x:.2f}}<br>CER: %{{y:.2f}}%<extra></extra>'
+                            customdata: customData,
+                            hovertemplate: '<b>%{{text}}</b><br>CER: %{{y:.2f}}%<br>───────────<br>Perp Globale: %{{customdata[0]}}<br>Perp Trans: %{{customdata[1]}}<br>Perp Seg: %{{customdata[2]}}<extra></extra>'
                         }},
                         {{
                             x: [xMinP, xMaxP],
