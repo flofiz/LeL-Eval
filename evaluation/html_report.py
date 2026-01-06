@@ -459,7 +459,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <script>
     try {{
         // Données embarquées
-        const reportData = {json_data};
+        var reportData = {json_data};
         
         // Afficher les données brutes
         document.getElementById('rawData').textContent = JSON.stringify(reportData.summary, null, 2);
