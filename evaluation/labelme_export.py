@@ -174,8 +174,9 @@ def tsv_to_labelme(tsv_content: str,
                             valid_perps = [t['perplexity'] for t in line_tokens if t['perplexity'] is not None]
                             if valid_perps:
                                 avg_perp = sum(valid_perps) / len(valid_perps)
-                                max_perp = max(valid_perps)
-                                shape["description"] += f"Perp: {avg_perp:.2f} (Trans: {line_perplexity_trans:.2f if line_perplexity_trans else 'N/A'}, Seg: {line_perplexity_seg:.2f if line_perplexity_seg else 'N/A'})"
+                                trans_str = f"{line_perplexity_trans:.2f}" if line_perplexity_trans else 'N/A'
+                                seg_str = f"{line_perplexity_seg:.2f}" if line_perplexity_seg else 'N/A'
+                                shape["description"] += f"Perp: {avg_perp:.2f} (Trans: {trans_str}, Seg: {seg_str})"
                 
                 shapes.append(shape)
             except Exception as line_error:
